@@ -47,12 +47,21 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
       config: { mimeType },
     });
 
-    // Ask Gemini to transcribe and lightly clean the text
+    // Ask Gemini to transcribe and lightly clean the text with deterministic settings
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 8192,
+      },
       contents: createUserContent([
         createPartFromUri(uploadedFile.uri, uploadedFile.mimeType),
-        "Transcribe this audio as accurately as possible. The audio may be in Tagalog, English, or a mix of both; preserve Tagalog words and sentences exactly as spoken and do not translate. Then lightly clean the transcript: fix capitalization and punctuation, remove obvious filler sounds like “uh/um” when they are not meaningful, and merge broken sentences so it reads like a clean meeting transcript. Return only the cleaned transcript text.",
+        "You are a professional meeting transcription engine similar to Plaud AI. "
+          + "Transcribe this audio as accurately and verbatim as possible. The audio may be in Tagalog, English, or a mix of both; "
+          + "preserve Tagalog and English words and sentences exactly as spoken and do NOT translate or summarize. "
+          + "Lightly clean the transcript only by fixing capitalization and punctuation and removing obvious filler interjections like “uh/um” or repeated stutters when they are not meaningful. "
+          + "Keep sentence order and speaker wording faithful to the original audio. "
+          + "Return only the cleaned transcript text, without any explanations or extra formatting.",
       ]),
     });
 

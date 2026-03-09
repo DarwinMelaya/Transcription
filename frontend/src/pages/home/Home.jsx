@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { transcribeAudio } from "../../utils/api";
 
 const Home = () => {
   const [file, setFile] = useState(null);
@@ -24,21 +25,8 @@ const Home = () => {
     setTranscript("");
 
     try {
-      const formData = new FormData();
-      formData.append("audio", file);
-
-      const res = await fetch("http://localhost:3000/transcribe", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to transcribe audio.");
-      }
-
-      const data = await res.json();
-      setTranscript(data.transcript || "");
+      const { transcript: text } = await transcribeAudio(file);
+      setTranscript(text || "");
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { summarizeTranscript, transcribeAudio } from "../../utils/api";
+import TranscribingModal from "../../Components/Modals/TranscribingModal";
 
 const Home = () => {
   const [file, setFile] = useState(null);
@@ -11,7 +12,9 @@ const Home = () => {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState("");
 
-  const [builtInPrompt, setBuiltInPrompt] = useState("Executive Minutes (Lite)");
+  const [builtInPrompt, setBuiltInPrompt] = useState(
+    "Executive Minutes (Lite)",
+  );
   const [documentType, setDocumentType] = useState("Executive Meeting Minute");
   const [responseStyle, setResponseStyle] = useState("Concise, professional");
   const [extraNotes, setExtraNotes] = useState("");
@@ -123,6 +126,7 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-[#070A12] text-white">
+      <TranscribingModal open={loading} fileName={file?.name} />
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute left-1/2 top-[-14rem] h-[30rem] w-[55rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-indigo-600/25 via-sky-500/20 to-emerald-500/15 blur-3xl" />
         <div className="absolute bottom-[-18rem] right-[-12rem] h-[34rem] w-[34rem] rounded-full bg-sky-500/10 blur-3xl" />
@@ -136,19 +140,14 @@ const Home = () => {
               TRANSCRIPT • SUMMARY
             </p>
             <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight">
-              Convert audio to transcript, then generate a clean executive summary
+              Convert audio to transcript, then generate a clean executive
+              summary
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-              Upload an audio file to transcribe. Then convert the transcript into a
-              concise, professional Markdown summary with optional extra notes.
+              Upload an audio file to transcribe. Then convert the transcript
+              into a concise, professional Markdown summary with optional extra
+              notes.
             </p>
-          </div>
-
-          <div className="hidden sm:block">
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <p className="text-xs font-semibold text-white/70">Model</p>
-              <p className="mt-1 text-sm font-semibold">Gemini (Flash)</p>
-            </div>
           </div>
         </div>
 
@@ -160,7 +159,9 @@ const Home = () => {
                 <p className="text-xs font-semibold text-white/50">
                   TRANSCRIPTION
                 </p>
-                <h2 className="mt-1 text-lg font-semibold">Transcript Studio</h2>
+                <h2 className="mt-1 text-lg font-semibold">
+                  Transcript Studio
+                </h2>
               </div>
               <div className="flex gap-2">
                 <button
@@ -272,7 +273,9 @@ const Home = () => {
           {/* Right panel */}
           <div className="rounded-3xl border border-white/10 bg-white/5 shadow-[0_20px_80px_-40px_rgba(0,0,0,0.9)] backdrop-blur">
             <div className="border-b border-white/10 px-6 py-5">
-              <p className="text-xs font-semibold text-white/50">LOGIC ARCHITECT</p>
+              <p className="text-xs font-semibold text-white/50">
+                LOGIC ARCHITECT
+              </p>
               <h2 className="mt-1 text-lg font-semibold">Summary Builder</h2>
               <p className="mt-1 text-xs text-white/55">
                 Configure the intelligence layer and processing parameters for
@@ -336,10 +339,16 @@ const Home = () => {
                     >
                       Executive Meeting Minute
                     </option>
-                    <option className="bg-[#070A12]" value="Project Update Summary">
+                    <option
+                      className="bg-[#070A12]"
+                      value="Project Update Summary"
+                    >
                       Project Update Summary
                     </option>
-                    <option className="bg-[#070A12]" value="Technical Call Notes">
+                    <option
+                      className="bg-[#070A12]"
+                      value="Technical Call Notes"
+                    >
                       Technical Call Notes
                     </option>
                   </select>
@@ -354,10 +363,16 @@ const Home = () => {
                     onChange={(e) => setResponseStyle(e.target.value)}
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80 outline-none focus:border-sky-400/40 focus:ring-2 focus:ring-sky-400/20"
                   >
-                    <option className="bg-[#070A12]" value="Concise, professional">
+                    <option
+                      className="bg-[#070A12]"
+                      value="Concise, professional"
+                    >
                       Concise, professional
                     </option>
-                    <option className="bg-[#070A12]" value="Detailed, professional">
+                    <option
+                      className="bg-[#070A12]"
+                      value="Detailed, professional"
+                    >
                       Detailed, professional
                     </option>
                     <option
@@ -377,9 +392,11 @@ const Home = () => {
                 <p className="mt-2 text-xs leading-5 text-white/60">
                   Write meeting minutes in Markdown. Do not invent details. If
                   missing:{" "}
-                  <span className="font-semibold text-white/70">Not specified</span>.
-                  Include: Title, Date, Attendees, Agenda, Executive Summary, Key
-                  Points, Decisions, Action Items, Risks, Next Steps.
+                  <span className="font-semibold text-white/70">
+                    Not specified
+                  </span>
+                  . Include: Title, Date, Attendees, Agenda, Executive Summary,
+                  Key Points, Decisions, Action Items, Risks, Next Steps.
                 </p>
               </div>
 
@@ -437,7 +454,8 @@ const Home = () => {
                         No summary yet
                       </p>
                       <p className="mt-1 text-xs text-white/50">
-                        Generate a transcript first, then click Generate Summary.
+                        Generate a transcript first, then click Generate
+                        Summary.
                       </p>
                     </div>
                   )}

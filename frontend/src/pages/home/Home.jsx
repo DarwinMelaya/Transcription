@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   finalizeChunkedTranscription,
   startChunkedTranscription,
@@ -13,6 +13,8 @@ const Home = () => {
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [audioDurationSeconds, setAudioDurationSeconds] = useState(null);
+  const [audioDurationLoading, setAudioDurationLoading] = useState(false);
   const [chunkJob, setChunkJob] = useState(null); // { jobId, totalParts }
   const [chunkPartIndex, setChunkPartIndex] = useState(0);
   const [chunkParts, setChunkParts] = useState([]); // transcript parts
@@ -41,12 +43,25 @@ const Home = () => {
     return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
   };
 
+  const formatDuration = (seconds) => {
+    if (!Number.isFinite(seconds) || seconds < 0) return "—";
+    const total = Math.round(seconds);
+    const s = total % 60;
+    const totalMinutes = Math.floor(total / 60);
+    const m = totalMinutes % 60;
+    const h = Math.floor(totalMinutes / 60);
+
+    const pad2 = (n) => String(n).padStart(2, "0");
+    return h > 0 ? `${h}:${pad2(m)}:${pad2(s)}` : `${m}:${pad2(s)}`;
+  };
+
   const handleFileChange = (e) => {
     setFile(e.target.files?.[0] ?? null);
     setTranscript("");
     setError("");
     setSummary("");
     setSummaryError("");
+    setAudioDurationSeconds(null);
     setChunkJob(null);
     setChunkPartIndex(0);
     setChunkParts([]);
@@ -74,6 +89,28 @@ const Home = () => {
         resolve(null);
       }
     });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (!file) {
+        setAudioDurationSeconds(null);
+        setAudioDurationLoading(false);
+        return;
+      }
+
+      setAudioDurationLoading(true);
+      const dur = await getAudioDurationSeconds(file);
+      if (cancelled) return;
+      setAudioDurationSeconds(typeof dur === "number" ? dur : null);
+      setAudioDurationLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
 
   const transcribeNextChunk = async () => {
     if (!chunkJob?.jobId) return;
@@ -316,8 +353,10 @@ const Home = () => {
                       </p>
                       <p className="mt-1 text-xs text-white/55">
                         {file
-                          ? `${formatBytes(file.size)} • ${
-                              file.type || "audio/*"
+                          ? `${formatBytes(file.size)} • ${file.type || "audio/*"} • ${
+                              audioDurationLoading
+                                ? "Duration: …"
+                                : `Duration: ${formatDuration(audioDurationSeconds)}`
                             }`
                           : "Tip: clearer audio = better transcript."}
                       </p>

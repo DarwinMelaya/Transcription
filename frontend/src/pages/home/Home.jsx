@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  exportSummaryPdf,
   finalizeChunkedTranscription,
   startChunkedTranscription,
   summarizeTranscript,
@@ -24,6 +25,8 @@ const Home = () => {
   const [summary, setSummary] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState("");
 
   const [builtInPrompt, setBuiltInPrompt] = useState(
     "Executive Minutes (Lite)",
@@ -232,6 +235,7 @@ const Home = () => {
 
     setSummaryLoading(true);
     setSummaryError("");
+    setPdfError("");
     setSummary("");
 
     try {
@@ -249,12 +253,48 @@ const Home = () => {
     }
   };
 
+  const handleExportPdf = async () => {
+    if (!summary.trim()) {
+      setPdfError("Please generate a summary first.");
+      return;
+    }
+
+    setPdfLoading(true);
+    setPdfError("");
+
+    try {
+      const blob = await exportSummaryPdf(summary, {
+        title: `${transcriptBaseName}-summary`,
+      });
+
+      const pdfBlob =
+        blob && blob.type === "application/pdf"
+          ? blob
+          : new Blob([blob], { type: "application/pdf" });
+
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${transcriptBaseName}-summary.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Give the browser a moment to start the download before revoking.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (err) {
+      setPdfError(err.message || "Failed to export PDF.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const handleClear = () => {
     setTranscript("");
     setError("");
     setFile(null);
     setSummary("");
     setSummaryError("");
+    setPdfError("");
     setChunkJob(null);
     setChunkPartIndex(0);
     setChunkParts([]);
@@ -568,6 +608,12 @@ const Home = () => {
                 </div>
               )}
 
+              {pdfError && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {pdfError}
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={handleGenerateSummary}
@@ -578,6 +624,18 @@ const Home = () => {
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#070A12]/40 border-t-[#070A12]" />
                 )}
                 Generate Summary
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportPdf}
+                disabled={pdfLoading || !summary}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pdfLoading && (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white/80" />
+                )}
+                Export PDF
               </button>
 
               <div className="pt-2">

@@ -126,3 +126,27 @@ export async function summarizeTranscript(transcript, options = {}) {
 
   return { summary: data.summary ?? "" };
 }
+
+/**
+ * Export a summary as a designed PDF.
+ * @param {string} summary
+ * @param {{ title?: string }} [options]
+ * @returns {Promise<Blob>}
+ */
+export async function exportSummaryPdf(summary, options = {}) {
+  const res = await fetch(`${API_BASE}/summary/pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      summary,
+      title: options.title,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to export summary PDF.");
+  }
+
+  return await res.blob();
+}

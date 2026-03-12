@@ -21,6 +21,11 @@ const ai = new GoogleGenAI({
 
 const app = express();
 app.use(cors());
+app.use(
+  express.json({
+    limit: "2mb",
+  }),
+);
 const upload = multer({ dest: "uploads/" });
 const PORT = process.env.PORT || 3000;
 
@@ -99,6 +104,107 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
   } finally {
     // Clean up temp file
     fs.unlink(tempPath, () => {});
+  }
+});
+
+// POST /summarize - application/json body: { transcript, documentType, responseStyle, extraNotes, builtInPrompt }
+app.post("/summarize", async (req, res) => {
+  const {
+    transcript,
+    documentType = "Executive Meeting Minute",
+    responseStyle = "Concise, professional",
+    extraNotes = "",
+    builtInPrompt = "Executive Minutes (Lite)",
+  } = req.body ?? {};
+
+  const text = typeof transcript === "string" ? transcript.trim() : "";
+  if (!text) {
+    return res.status(400).json({ error: "Transcript text is required." });
+  }
+
+  // Keep request size under control (Gemini can handle large text, but this prevents accidental huge payloads)
+  if (text.length > 200_000) {
+    return res.status(413).json({
+      error: "Transcript is too long. Please use a shorter transcript.",
+    });
+  }
+
+  const safeExtraNotes =
+      typeof extraNotes === "string" ? extraNotes.trim() : "";
+  const safeDocType =
+      typeof documentType === "string" ? documentType.trim() : "Document";
+  const safeStyle =
+      typeof responseStyle === "string"
+        ? responseStyle.trim()
+        : "Concise, professional";
+  const safeBuiltIn =
+      typeof builtInPrompt === "string"
+        ? builtInPrompt.trim()
+        : "Executive Minutes (Lite)";
+
+  const directives = [
+    `DOCUMENT TYPE: ${safeDocType}`,
+    `RESPONSE STYLE: ${safeStyle}`,
+    `BUILT-IN PROMPT: ${safeBuiltIn}`,
+    "",
+    "SPECIAL DIRECTIVES (LITE):",
+    "- Write the output in Markdown.",
+    "- Do not invent details. If information is missing, state 'Not specified'.",
+    "- Keep it structured and skimmable.",
+    "- If the transcript is mixed Tagalog/English, keep names/terms as-is.",
+  ];
+
+  if (safeExtraNotes) {
+    directives.push("", "EXTRA NOTES (USER):", safeExtraNotes);
+  }
+
+  directives.push(
+    "",
+    "OUTPUT FORMAT (Markdown):",
+    "## Title",
+    "## Date/Time",
+    "## Attendees",
+    "## Agenda",
+    "## Executive Summary",
+    "## Key Points",
+    "## Decisions",
+    "## Action Items",
+    "## Risks / Blockers",
+    "## Next Steps",
+    "",
+    "TRANSCRIPT:",
+    text,
+  );
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+      },
+      contents: createUserContent([directives.join("\n")]),
+    });
+
+    const summary = response.text?.trim?.() ?? "";
+    if (!summary) {
+      return res.status(500).json({ error: "No summary returned from model." });
+    }
+
+    return res.json({ summary });
+  } catch (err) {
+    console.error("Summarization error:", err);
+
+    if (err.status === 503) {
+      return res.status(503).json({
+        error:
+          "The summarization model is temporarily overloaded (503). Please wait a bit and try again.",
+      });
+    }
+
+    return res.status(500).json({
+      error: "Failed to summarize transcript. Please try again.",
+    });
   }
 });
 

@@ -1,11 +1,20 @@
 import { useState } from "react";
-import { transcribeAudio } from "../../utils/api";
+import { summarizeTranscript, transcribeAudio } from "../../utils/api";
 
 const Home = () => {
   const [file, setFile] = useState(null);
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const [summary, setSummary] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
+
+  const [builtInPrompt, setBuiltInPrompt] = useState("Executive Minutes (Lite)");
+  const [documentType, setDocumentType] = useState("Executive Meeting Minute");
+  const [responseStyle, setResponseStyle] = useState("Concise, professional");
+  const [extraNotes, setExtraNotes] = useState("");
 
   const formatBytes = (bytes) => {
     if (!Number.isFinite(bytes) || bytes <= 0) return "—";
@@ -22,6 +31,8 @@ const Home = () => {
     setFile(e.target.files?.[0] ?? null);
     setTranscript("");
     setError("");
+    setSummary("");
+    setSummaryError("");
   };
 
   const handleSubmit = async (e) => {
@@ -34,6 +45,8 @@ const Home = () => {
     setLoading(true);
     setError("");
     setTranscript("");
+    setSummary("");
+    setSummaryError("");
 
     try {
       const { transcript: text } = await transcribeAudio(file);
@@ -45,21 +58,21 @@ const Home = () => {
     }
   };
 
-  const handleCopy = async () => {
-    if (!transcript) return;
+  const handleCopy = async (text) => {
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(transcript);
+      await navigator.clipboard.writeText(text);
     } catch {
       // ignore (clipboard permissions)
     }
   };
 
-  const handleDownload = () => {
-    if (!transcript) return;
+  const handleDownload = (text, filenameBase) => {
+    if (!text) return;
     const safeBase =
-      (file?.name ? file.name.replace(/\.[^/.]+$/, "") : "transcript") ||
-      "transcript";
-    const blob = new Blob([transcript], { type: "text/plain;charset=utf-8" });
+      (filenameBase ? filenameBase.replace(/\.[^/.]+$/, "") : "export") ||
+      "export";
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
@@ -71,239 +84,366 @@ const Home = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleGenerateSummary = async () => {
+    if (!transcript.trim()) {
+      setSummaryError("Please generate a transcript first.");
+      return;
+    }
+
+    setSummaryLoading(true);
+    setSummaryError("");
+    setSummary("");
+
+    try {
+      const { summary: s } = await summarizeTranscript(transcript, {
+        builtInPrompt,
+        documentType,
+        responseStyle,
+        extraNotes,
+      });
+      setSummary(s || "");
+    } catch (err) {
+      setSummaryError(err.message || "Failed to generate summary.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
   const handleClear = () => {
     setTranscript("");
     setError("");
     setFile(null);
+    setSummary("");
+    setSummaryError("");
   };
 
+  const transcriptBaseName = file?.name
+    ? file.name.replace(/\.[^/.]+$/, "")
+    : "transcript";
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="relative overflow-hidden border-b border-slate-200 bg-white">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-24 left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-sky-200/60 via-indigo-200/40 to-emerald-200/40 blur-3xl" />
-          <div className="absolute -bottom-32 right-[-10rem] h-72 w-72 rounded-full bg-sky-200/40 blur-3xl" />
-        </div>
-
-        <div className="relative mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
-            <div>
-              <h1 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-                Audio to Text Transcription
-              </h1>
-              <p className="mt-3 max-w-xl text-pretty text-sm leading-6 text-slate-600 sm:text-base">
-                Upload an audio file and get a readable transcript in seconds.
-                Simple, secure-by-default, and designed with a clean government
-                dashboard feel.
-              </p>
-
-              <div className="mt-6 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-slate-200 bg-white/70 p-4 shadow-sm">
-                  <p className="text-xs font-semibold text-slate-900">
-                    Accurate output
-                  </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Clear formatting for long text.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white/70 p-4 shadow-sm">
-                  <p className="text-xs font-semibold text-slate-900">
-                    Fast workflow
-                  </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Copy or download as TXT.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white/70 p-4 shadow-sm">
-                  <p className="text-xs font-semibold text-slate-900">
-                    Professional UI
-                  </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Clean spacing and contrast.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-lg shadow-slate-200/50">
-              <div className="border-b border-slate-200 px-5 py-4">
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Transcription request
-                </h2>
-                <p className="mt-1 text-xs text-slate-600">
-                  Supported: any audio format your browser can upload.
-                </p>
-              </div>
-
-              <div className="p-5">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700">
-                      Upload audio file
-                    </label>
-                    <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">
-                            {file ? file.name : "Choose a file to start"}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-600">
-                            {file
-                              ? `${formatBytes(file.size)} • ${
-                                  file.type || "audio/*"
-                                }`
-                              : "Tip: use clear recordings for best results."}
-                          </p>
-                        </div>
-
-                        <label className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-800 focus-within:outline-none focus-within:ring-2 focus-within:ring-sky-400 focus-within:ring-offset-2">
-                          <input
-                            type="file"
-                            accept="audio/*"
-                            onChange={handleFileChange}
-                            className="sr-only"
-                          />
-                          Browse
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  {error && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                      {error}
-                    </div>
-                  )}
-
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                    >
-                      {loading && (
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white" />
-                      )}
-                      {loading ? "Transcribing..." : "Transcribe"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleClear}
-                      className="inline-flex w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 sm:w-auto"
-                    >
-                      Reset
-                    </button>
-
-                    <div className="sm:ml-auto" />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-900">
-                        Step 1
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        Upload your audio file.
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-900">
-                        Step 2
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        Click Transcribe.
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-900">
-                        Step 3
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        Copy or download the result.
-                      </p>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#070A12] text-white">
+      <div className="pointer-events-none fixed inset-0">
+        <div className="absolute left-1/2 top-[-14rem] h-[30rem] w-[55rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-indigo-600/25 via-sky-500/20 to-emerald-500/15 blur-3xl" />
+        <div className="absolute bottom-[-18rem] right-[-12rem] h-[34rem] w-[34rem] rounded-full bg-sky-500/10 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),rgba(255,255,255,0)_45%)]" />
       </div>
 
-      <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">
-                Transcript
-              </h3>
-              <p className="mt-1 text-xs text-slate-600">
-                Your output will appear here. Use the actions to export it.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleCopy}
-                disabled={!transcript}
-                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={!transcript}
-                className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Download .txt
-              </button>
-            </div>
+      <div className="relative mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <p className="text-xs font-semibold tracking-widest text-white/60">
+              TRANSCRIPT • SUMMARY
+            </p>
+            <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight">
+              Convert audio to transcript, then generate a clean executive summary
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+              Upload an audio file to transcribe. Then convert the transcript into a
+              concise, professional Markdown summary with optional extra notes.
+            </p>
           </div>
 
-          <div className="p-5">
-            {transcript ? (
-              <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800 whitespace-pre-wrap">
-                {transcript}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
-                <p className="text-sm font-semibold text-slate-900">
-                  No transcript yet
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  Upload an audio file and click Transcribe to generate text.
-                </p>
-              </div>
-            )}
+          <div className="hidden sm:block">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <p className="text-xs font-semibold text-white/70">Model</p>
+              <p className="mt-1 text-sm font-semibold">Gemini (Flash)</p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold text-slate-900">Privacy note</p>
-            <p className="mt-2 text-xs leading-5 text-slate-600">
-              Your file is only used for transcription. Avoid uploading
-              sensitive recordings unless required for your workflow.
-            </p>
+        <div className="mt-10 grid gap-6 lg:grid-cols-2">
+          {/* Left panel */}
+          <div className="rounded-3xl border border-white/10 bg-white/5 shadow-[0_20px_80px_-40px_rgba(0,0,0,0.9)] backdrop-blur">
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+              <div>
+                <p className="text-xs font-semibold text-white/50">
+                  TRANSCRIPTION
+                </p>
+                <h2 className="mt-1 text-lg font-semibold">Transcript Studio</h2>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopy(transcript)}
+                  disabled={!transcript}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload(transcript, transcriptBaseName)}
+                  disabled={!transcript}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Download
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {file ? file.name : "Drop a file or browse to begin"}
+                      </p>
+                      <p className="mt-1 text-xs text-white/55">
+                        {file
+                          ? `${formatBytes(file.size)} • ${
+                              file.type || "audio/*"
+                            }`
+                          : "Tip: clearer audio = better transcript."}
+                      </p>
+                    </div>
+
+                    <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-sky-400 focus-within:ring-offset-2 focus-within:ring-offset-[#070A12]">
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={handleFileChange}
+                        className="sr-only"
+                      />
+                      Browse
+                    </label>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#070A12] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  >
+                    {loading && (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#070A12]/40 border-t-[#070A12]" />
+                    )}
+                    {loading ? "Transcribing..." : "Transcribe Audio"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className="inline-flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/80 hover:bg-white/10 sm:w-auto"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </form>
+
+              <div className="mt-6">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-white/50">OUTPUT</p>
+                  <p className="text-xs text-white/40">
+                    {transcript
+                      ? `${transcript.length.toLocaleString()} chars`
+                      : "—"}
+                  </p>
+                </div>
+
+                <div className="mt-3">
+                  {transcript ? (
+                    <div className="max-h-[26rem] overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/80 whitespace-pre-wrap">
+                      {transcript}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/10 p-10 text-center">
+                      <p className="text-sm font-semibold text-white/80">
+                        Waiting for transcript
+                      </p>
+                      <p className="mt-1 text-xs text-white/50">
+                        Upload an audio file, then click Transcribe Audio.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold text-slate-900">
-              Better results
-            </p>
-            <p className="mt-2 text-xs leading-5 text-slate-600">
-              Use clear speech, reduce background noise, and prefer one speaker
-              per recording when possible.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold text-slate-900">Export-ready</p>
-            <p className="mt-2 text-xs leading-5 text-slate-600">
-              Copy to clipboard for reports, or download as a `.txt` file for
-              archiving.
-            </p>
+
+          {/* Right panel */}
+          <div className="rounded-3xl border border-white/10 bg-white/5 shadow-[0_20px_80px_-40px_rgba(0,0,0,0.9)] backdrop-blur">
+            <div className="border-b border-white/10 px-6 py-5">
+              <p className="text-xs font-semibold text-white/50">LOGIC ARCHITECT</p>
+              <h2 className="mt-1 text-lg font-semibold">Summary Builder</h2>
+              <p className="mt-1 text-xs text-white/55">
+                Configure the intelligence layer and processing parameters for
+                your output.
+              </p>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-[11px] font-semibold tracking-widest text-white/40">
+                    BUILT-IN PROMPT
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {["Executive Minutes (Lite)", "Action Items (Lite)"].map(
+                      (opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setBuiltInPrompt(opt)}
+                          className={[
+                            "rounded-xl border px-3 py-2 text-xs font-semibold",
+                            opt === builtInPrompt
+                              ? "border-sky-400/40 bg-sky-500/15 text-white"
+                              : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
+                          ].join(" ")}
+                        >
+                          {opt}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-semibold tracking-widest text-white/40">
+                    EXTRA NOTES (OPTIONAL)
+                  </p>
+                  <textarea
+                    value={extraNotes}
+                    onChange={(e) => setExtraNotes(e.target.value)}
+                    placeholder="e.g., Focus on budget, timelines, and assigned owners…"
+                    className="mt-2 h-[76px] w-full resize-none rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80 placeholder:text-white/30 outline-none focus:border-sky-400/40 focus:ring-2 focus:ring-sky-400/20"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-[11px] font-semibold tracking-widest text-white/40">
+                    DOCUMENT TYPE
+                  </p>
+                  <select
+                    value={documentType}
+                    onChange={(e) => setDocumentType(e.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80 outline-none focus:border-sky-400/40 focus:ring-2 focus:ring-sky-400/20"
+                  >
+                    <option
+                      className="bg-[#070A12]"
+                      value="Executive Meeting Minute"
+                    >
+                      Executive Meeting Minute
+                    </option>
+                    <option className="bg-[#070A12]" value="Project Update Summary">
+                      Project Update Summary
+                    </option>
+                    <option className="bg-[#070A12]" value="Technical Call Notes">
+                      Technical Call Notes
+                    </option>
+                  </select>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-semibold tracking-widest text-white/40">
+                    RESPONSE STYLE
+                  </p>
+                  <select
+                    value={responseStyle}
+                    onChange={(e) => setResponseStyle(e.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80 outline-none focus:border-sky-400/40 focus:ring-2 focus:ring-sky-400/20"
+                  >
+                    <option className="bg-[#070A12]" value="Concise, professional">
+                      Concise, professional
+                    </option>
+                    <option className="bg-[#070A12]" value="Detailed, professional">
+                      Detailed, professional
+                    </option>
+                    <option
+                      className="bg-[#070A12]"
+                      value="Bullet-heavy, professional"
+                    >
+                      Bullet-heavy, professional
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] font-semibold tracking-widest text-white/40">
+                  SPECIAL DIRECTIVES (LITE)
+                </p>
+                <p className="mt-2 text-xs leading-5 text-white/60">
+                  Write meeting minutes in Markdown. Do not invent details. If
+                  missing:{" "}
+                  <span className="font-semibold text-white/70">Not specified</span>.
+                  Include: Title, Date, Attendees, Agenda, Executive Summary, Key
+                  Points, Decisions, Action Items, Risks, Next Steps.
+                </p>
+              </div>
+
+              {summaryError && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {summaryError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleGenerateSummary}
+                disabled={summaryLoading || !transcript}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#070A12] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {summaryLoading && (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#070A12]/40 border-t-[#070A12]" />
+                )}
+                Generate Summary
+              </button>
+
+              <div className="pt-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-white/50">SUMMARY</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(summary)}
+                      disabled={!summary}
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDownload(summary, `${transcriptBaseName}-summary`)
+                      }
+                      disabled={!summary}
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Download
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  {summary ? (
+                    <div className="max-h-[22rem] overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/80 whitespace-pre-wrap">
+                      {summary}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/10 p-8 text-center">
+                      <p className="text-sm font-semibold text-white/80">
+                        No summary yet
+                      </p>
+                      <p className="mt-1 text-xs text-white/50">
+                        Generate a transcript first, then click Generate Summary.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

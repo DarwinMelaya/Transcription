@@ -25,6 +25,80 @@ export async function transcribeAudio(file) {
 }
 
 /**
+ * Start a chunked transcription job (backend splits into 30-minute parts).
+ * @param {File} file
+ * @returns {Promise<{ jobId: string, totalParts: number, chunkSeconds: number, durationSeconds: number | null }>}
+ */
+export async function startChunkedTranscription(file) {
+  const formData = new FormData();
+  formData.append("audio", file);
+
+  const res = await fetch(`${API_BASE}/transcribe/start`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to start chunked transcription.");
+  }
+
+  return {
+    jobId: data.jobId,
+    totalParts: data.totalParts ?? 0,
+    chunkSeconds: data.chunkSeconds ?? 1800,
+    durationSeconds:
+      typeof data.durationSeconds === "number" ? data.durationSeconds : null,
+  };
+}
+
+/**
+ * Transcribe a single chunk part of a job.
+ * @param {string} jobId
+ * @param {number} partIndex
+ * @returns {Promise<{ transcriptPart: string, partIndex: number, totalParts: number, done: boolean }>}
+ */
+export async function transcribeChunkPart(jobId, partIndex) {
+  const res = await fetch(`${API_BASE}/transcribe/part`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jobId, partIndex }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to transcribe chunk part.");
+  }
+
+  return {
+    transcriptPart: data.transcriptPart ?? "",
+    partIndex: data.partIndex ?? partIndex,
+    totalParts: data.totalParts ?? 0,
+    done: Boolean(data.done),
+  };
+}
+
+/**
+ * Finalize a chunked transcription job by merging parts on the backend.
+ * @param {string} jobId
+ * @returns {Promise<{ transcript: string }>}
+ */
+export async function finalizeChunkedTranscription(jobId) {
+  const res = await fetch(`${API_BASE}/transcribe/finalize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jobId }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to finalize chunked transcription.");
+  }
+
+  return { transcript: data.transcript ?? "" };
+}
+
+/**
  * Generate a concise, professional summary from a transcript.
  * @param {string} transcript
  * @param {{ documentType?: string, responseStyle?: string, extraNotes?: string, builtInPrompt?: string }} [options]

@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { summarizeTranscript, transcribeAudio } from "../../utils/api";
+import {
+  finalizeChunkedTranscription,
+  startChunkedTranscription,
+  summarizeTranscript,
+  transcribeAudio,
+  transcribeChunkPart,
+} from "../../utils/api";
 import TranscribingModal from "../../Components/Modals/TranscribingModal";
 
 const Home = () => {
@@ -7,6 +13,11 @@ const Home = () => {
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [chunkJob, setChunkJob] = useState(null); // { jobId, totalParts }
+  const [chunkPartIndex, setChunkPartIndex] = useState(0);
+  const [chunkParts, setChunkParts] = useState([]); // transcript parts
+  const [awaitingNext, setAwaitingNext] = useState(false);
+  const [chunked, setChunked] = useState(false);
 
   const [summary, setSummary] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -36,6 +47,73 @@ const Home = () => {
     setError("");
     setSummary("");
     setSummaryError("");
+    setChunkJob(null);
+    setChunkPartIndex(0);
+    setChunkParts([]);
+    setAwaitingNext(false);
+    setChunked(false);
+  };
+
+  const getAudioDurationSeconds = (f) =>
+    new Promise((resolve) => {
+      try {
+        const audio = document.createElement("audio");
+        const url = URL.createObjectURL(f);
+        audio.preload = "metadata";
+        audio.onloadedmetadata = () => {
+          const dur = Number.isFinite(audio.duration) ? audio.duration : null;
+          URL.revokeObjectURL(url);
+          resolve(dur);
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve(null);
+        };
+        audio.src = url;
+      } catch {
+        resolve(null);
+      }
+    });
+
+  const transcribeNextChunk = async () => {
+    if (!chunkJob?.jobId) return;
+
+    setLoading(true);
+    setError("");
+    setAwaitingNext(false);
+
+    try {
+      const { transcriptPart } = await transcribeChunkPart(
+        chunkJob.jobId,
+        chunkPartIndex,
+      );
+
+      setChunkParts((prev) => {
+        const next = [...prev];
+        next[chunkPartIndex] = transcriptPart || "";
+        return next;
+      });
+
+      const nextIndex = chunkPartIndex + 1;
+      setChunkPartIndex(nextIndex);
+
+      if (nextIndex < chunkJob.totalParts) {
+        setAwaitingNext(true);
+        return;
+      }
+
+      const { transcript: merged } = await finalizeChunkedTranscription(
+        chunkJob.jobId,
+      );
+      setTranscript(merged || "");
+      setChunkJob(null);
+      setChunked(false);
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+      setAwaitingNext(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -50,8 +128,30 @@ const Home = () => {
     setTranscript("");
     setSummary("");
     setSummaryError("");
+    setChunkJob(null);
+    setChunkPartIndex(0);
+    setChunkParts([]);
+    setAwaitingNext(false);
+    setChunked(false);
 
     try {
+      const durationSeconds = await getAudioDurationSeconds(file);
+
+      if (typeof durationSeconds === "number" && durationSeconds > 30 * 60) {
+        const started = await startChunkedTranscription(file);
+
+        if (!started.totalParts || !started.jobId) {
+          throw new Error("Failed to start chunked transcription.");
+        }
+
+        setChunked(true);
+        setChunkJob({ jobId: started.jobId, totalParts: started.totalParts });
+        setChunkParts(Array(started.totalParts).fill(""));
+        setChunkPartIndex(0);
+        setAwaitingNext(true);
+        return;
+      }
+
       const { transcript: text } = await transcribeAudio(file);
       setTranscript(text || "");
     } catch (err) {
@@ -118,6 +218,11 @@ const Home = () => {
     setFile(null);
     setSummary("");
     setSummaryError("");
+    setChunkJob(null);
+    setChunkPartIndex(0);
+    setChunkParts([]);
+    setAwaitingNext(false);
+    setChunked(false);
   };
 
   const transcriptBaseName = file?.name
@@ -126,7 +231,25 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-[#070A12] text-white">
-      <TranscribingModal open={loading} fileName={file?.name} />
+      <TranscribingModal
+        open={loading || awaitingNext}
+        fileName={file?.name}
+        subtitle={
+          chunked
+            ? loading
+              ? "Transcribing this 30-minute part…"
+              : "Ready for the next 30-minute part"
+            : "Converting your audio to text…"
+        }
+        progressLabel={
+          chunked && chunkJob?.totalParts
+            ? `Part ${Math.min(chunkPartIndex + (loading ? 1 : 0), chunkJob.totalParts)} of ${chunkJob.totalParts}`
+            : null
+        }
+        actionLabel={awaitingNext ? "Transcribe next 30 minutes" : null}
+        onAction={awaitingNext ? transcribeNextChunk : null}
+        actionDisabled={loading}
+      />
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute left-1/2 top-[-14rem] h-[30rem] w-[55rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-indigo-600/25 via-sky-500/20 to-emerald-500/15 blur-3xl" />
         <div className="absolute bottom-[-18rem] right-[-12rem] h-[34rem] w-[34rem] rounded-full bg-sky-500/10 blur-3xl" />

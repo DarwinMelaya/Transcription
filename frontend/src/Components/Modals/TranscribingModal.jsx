@@ -1,4 +1,12 @@
-const TranscribingModal = ({ open, fileName }) => {
+const TranscribingModal = ({
+  open,
+  fileName,
+  subtitle,
+  progressLabel,
+  actionLabel,
+  onAction,
+  actionDisabled = false,
+}) => {
   if (!open) return null;
 
   return (
@@ -21,7 +29,7 @@ const TranscribingModal = ({ open, fileName }) => {
               TRANSCRIBING
             </p>
             <h3 className="mt-1 text-lg font-semibold text-white">
-              Converting your audio to text…
+              {subtitle || "Converting your audio to text…"}
             </h3>
             <p className="mt-2 text-sm leading-6 text-white/60">
               {fileName ? (
@@ -33,6 +41,12 @@ const TranscribingModal = ({ open, fileName }) => {
                 "Please keep this tab open while we process your audio."
               )}
             </p>
+
+            {progressLabel && (
+              <p className="mt-2 text-xs font-semibold text-white/55">
+                {progressLabel}
+              </p>
+            )}
           </div>
         </div>
 
@@ -43,6 +57,19 @@ const TranscribingModal = ({ open, fileName }) => {
             prevent losing progress.
           </p>
         </div>
+
+        {actionLabel && onAction && (
+          <div className="mt-5">
+            <button
+              type="button"
+              onClick={onAction}
+              disabled={actionDisabled}
+              className="inline-flex w-full items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#070A12] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {actionLabel}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -19,10 +19,11 @@ const Home = () => {
   const [audioDurationLoading, setAudioDurationLoading] = useState(false);
   const [chunkJob, setChunkJob] = useState(null); // { jobId, totalParts }
   const [chunkPartIndex, setChunkPartIndex] = useState(0);
-  const [chunkParts, setChunkParts] = useState([]); // transcript parts
   const [awaitingNext, setAwaitingNext] = useState(false);
   const [chunked, setChunked] = useState(false);
   const [chunkAuto, setChunkAuto] = useState(false);
+  const [chunkProgressPercent, setChunkProgressPercent] = useState(0);
+  const [chunkParts, setChunkParts] = useState([]);
   const [chunkRetryCount, setChunkRetryCount] = useState(0);
 
   const [summary, setSummary] = useState("");
@@ -76,6 +77,7 @@ const Home = () => {
     setChunkParts([]);
     setAwaitingNext(false);
     setChunked(false);
+    setChunkProgressPercent(0);
   };
 
   const getAudioDurationSeconds = (f) =>
@@ -143,6 +145,13 @@ const Home = () => {
 
       const nextIndex = chunkPartIndex + 1;
       setChunkPartIndex(nextIndex);
+      if (chunkJob?.totalParts) {
+        const completedParts = nextIndex;
+        const percent = Math.round(
+          (completedParts / chunkJob.totalParts) * 100,
+        );
+        setChunkProgressPercent(Number.isFinite(percent) ? percent : 0);
+      }
 
       if (nextIndex < chunkJob.totalParts) {
         setAwaitingNext(true);
@@ -160,7 +169,6 @@ const Home = () => {
     } catch (err) {
       setError(err.message || "Something went wrong.");
       setAwaitingNext(true);
-      setChunkRetryCount((c) => c + 1);
     } finally {
       setLoading(false);
     }
@@ -222,11 +230,10 @@ const Home = () => {
 
         setChunked(true);
         setChunkJob({ jobId: started.jobId, totalParts: started.totalParts });
-        setChunkParts(Array(started.totalParts).fill(""));
         setChunkPartIndex(0);
+        setChunkProgressPercent(0);
         setAwaitingNext(true);
         setChunkAuto(true);
-        setChunkRetryCount(0);
         return;
       }
 
@@ -343,6 +350,7 @@ const Home = () => {
     setChunkParts([]);
     setAwaitingNext(false);
     setChunked(false);
+    setChunkProgressPercent(0);
   };
 
   const transcriptBaseName = file?.name
@@ -366,6 +374,11 @@ const Home = () => {
         progressLabel={
           chunked && chunkJob?.totalParts
             ? `Part ${Math.min(chunkPartIndex + (loading ? 1 : 0), chunkJob.totalParts)} of ${chunkJob.totalParts}`
+            : null
+        }
+        progressPercent={
+          chunked && chunkJob?.totalParts
+            ? Math.min(100, Math.max(0, chunkProgressPercent))
             : null
         }
         modelLabel={transcribeModelUsed || null}
@@ -441,19 +454,19 @@ const Home = () => {
                       </p>
                       <p className="mt-1 text-xs text-white/55">
                         {file
-                          ? `${formatBytes(file.size)} • ${file.type || "audio/*"} • ${
+                          ? `${formatBytes(file.size)} • ${file.type || "audio/video"} • ${
                               audioDurationLoading
                                 ? "Duration: …"
                                 : `Duration: ${formatDuration(audioDurationSeconds)}`
                             }`
-                          : "Tip: clearer audio = better transcript."}
+                          : "Tip: clearer audio or video = better transcript."}
                       </p>
                     </div>
 
                     <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-sky-400 focus-within:ring-offset-2 focus-within:ring-offset-[#070A12]">
                       <input
                         type="file"
-                        accept="audio/*"
+                        accept="audio/*,video/*"
                         onChange={handleFileChange}
                         className="sr-only"
                       />

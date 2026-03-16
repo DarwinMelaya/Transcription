@@ -105,7 +105,7 @@ export async function startChunkedTranscription(file) {
  * Transcribe a single chunk part of a job.
  * @param {string} jobId
  * @param {number} partIndex
- * @returns {Promise<{ transcriptPart: string, partIndex: number, totalParts: number, done: boolean }>}
+ * @returns {Promise<{ transcriptPart: string, partIndex: number, totalParts: number, done: boolean, completedParts: number, progressPercent: number, modelUsed: string | null }>}
  */
 export async function transcribeChunkPart(jobId, partIndex) {
   const { data } = await fetchJsonWithTimeout(`${API_BASE}/transcribe/part`, {
@@ -121,6 +121,9 @@ export async function transcribeChunkPart(jobId, partIndex) {
     partIndex: data.partIndex ?? partIndex,
     totalParts: data.totalParts ?? 0,
     done: Boolean(data.done),
+    completedParts: typeof data.completedParts === "number" ? data.completedParts : 0,
+    progressPercent:
+      typeof data.progressPercent === "number" ? data.progressPercent : 0,
     modelUsed: data.modelUsed ?? null,
   };
 }

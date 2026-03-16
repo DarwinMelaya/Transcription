@@ -37,10 +37,15 @@ export function toSafePdfFilename(name) {
   return `${cleaned || "summary"}.pdf`;
 }
 
-export function buildSummaryHtml({ title = "Executive Summary", markdown = "" }) {
+export function buildSummaryHtml({
+  title = "Executive Summary",
+  markdown = "",
+}) {
   const md = typeof markdown === "string" ? markdown : "";
   const safeTitle =
-    typeof title === "string" && title.trim() ? title.trim() : "Executive Summary";
+    typeof title === "string" && title.trim()
+      ? title.trim()
+      : "Executive Summary";
 
   const contentHtml = marked.parse(md, {
     gfm: true,
@@ -221,11 +226,7 @@ export function buildSummaryHtml({ title = "Executive Summary", markdown = "" })
       ${contentHtml}
     </main>
 
-    <div class="footer">
-      <div><span class="dot"></span>Confidential summary</div>
-      <div class="pageNumber"></div>
-    </div>
+    
   </body>
 </html>`;
 }
-

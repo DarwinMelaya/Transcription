@@ -10,10 +10,8 @@ import { safeUnlink, safeRmDir } from "../utils/fileUtils.js";
 const router = express.Router();
 const upload = multer({
   dest: "uploads/",
-  limits: {
-    // Prevent accidental huge uploads from destabilizing the server.
-    fileSize: Number(process.env.MAX_UPLOAD_BYTES || 300 * 1024 * 1024), // 300MB
-  },
+  // No explicit fileSize limit here; if you want to enforce one,
+  // set MAX_UPLOAD_BYTES in the environment and wire it back in.
 });
 
 function isMulterError(err) {
@@ -178,12 +176,20 @@ router.post("/transcribe/part", async (req, res) => {
       chunkJobs.set(jobId, job);
     }
 
+    const completedParts = job.transcripts.filter(Boolean).length;
+    const progressPercent =
+      job.parts.length > 0
+        ? Math.round((completedParts / job.parts.length) * 100)
+        : 0;
+
     return res.json({
       partIndex: idx,
       totalParts: job.parts.length,
       transcriptPart: job.transcripts[idx] ?? "",
       done: job.transcripts.filter(Boolean).length === job.parts.length,
       modelUsed: job.lastModelUsed || null,
+      completedParts,
+      progressPercent,
     });
   } catch (err) {
     console.error("Chunk part transcription error:", err);

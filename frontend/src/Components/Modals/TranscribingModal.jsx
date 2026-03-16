@@ -3,6 +3,7 @@ const TranscribingModal = ({
   fileName,
   subtitle,
   progressLabel,
+  progressPercent,
   modelLabel,
   actionLabel,
   onAction,
@@ -43,11 +44,39 @@ const TranscribingModal = ({
               )}
             </p>
 
-            {progressLabel && (
-              <p className="mt-2 text-xs font-semibold text-white/55">
-                {progressLabel}
-              </p>
-            )}
+            <div className="mt-2 space-y-1">
+              {progressLabel && (
+                <p className="text-xs font-semibold text-white/55">
+                  {progressLabel}
+                </p>
+              )}
+              <div className="space-y-1">
+                {typeof progressPercent === "number" && (
+                  <p className="text-[11px] font-semibold text-white/55">
+                    {progressPercent}% complete
+                  </p>
+                )}
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className={`h-full rounded-full bg-sky-400 ${
+                      typeof progressPercent === "number"
+                        ? ""
+                        : "animate-pulse"
+                    }`}
+                    style={
+                      typeof progressPercent === "number"
+                        ? {
+                            width: `${Math.min(
+                              100,
+                              Math.max(0, progressPercent),
+                            )}%`,
+                          }
+                        : { width: "40%" }
+                    }
+                  />
+                </div>
+              </div>
+            </div>
 
             {modelLabel && (
               <p className="mt-2 text-xs font-semibold text-white/45">

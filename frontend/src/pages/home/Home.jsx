@@ -22,6 +22,8 @@ const Home = () => {
   const [chunkParts, setChunkParts] = useState([]); // transcript parts
   const [awaitingNext, setAwaitingNext] = useState(false);
   const [chunked, setChunked] = useState(false);
+  const [chunkAuto, setChunkAuto] = useState(false);
+  const [chunkRetryCount, setChunkRetryCount] = useState(0);
 
   const [summary, setSummary] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -153,13 +155,40 @@ const Home = () => {
       setTranscript(merged || "");
       setChunkJob(null);
       setChunked(false);
+      setChunkAuto(false);
+      setChunkRetryCount(0);
     } catch (err) {
       setError(err.message || "Something went wrong.");
       setAwaitingNext(true);
+      setChunkRetryCount((c) => c + 1);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (!chunkAuto) return;
+      if (!chunkJob?.jobId) return;
+      if (!Number.isInteger(chunkPartIndex)) return;
+      if (chunkPartIndex >= (chunkJob.totalParts || 0)) return;
+      if (loading) return;
+
+      try {
+        await transcribeNextChunk();
+        if (cancelled) return;
+      } catch {
+        // transcribeNextChunk already updates UI errors
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chunkAuto, chunkJob?.jobId, chunkPartIndex]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -196,6 +225,8 @@ const Home = () => {
         setChunkParts(Array(started.totalParts).fill(""));
         setChunkPartIndex(0);
         setAwaitingNext(true);
+        setChunkAuto(true);
+        setChunkRetryCount(0);
         return;
       }
 
@@ -327,7 +358,9 @@ const Home = () => {
           chunked
             ? loading
               ? "Transcribing this 30-minute part…"
-              : "Ready for the next 30-minute part"
+              : chunkAuto
+                ? "Continuing with the next 30-minute part…"
+                : "Ready for the next 30-minute part"
             : "Converting your audio to text…"
         }
         progressLabel={
@@ -336,8 +369,10 @@ const Home = () => {
             : null
         }
         modelLabel={transcribeModelUsed || null}
-        actionLabel={awaitingNext ? "Transcribe next 30 minutes" : null}
-        onAction={awaitingNext ? transcribeNextChunk : null}
+        actionLabel={
+          awaitingNext && !chunkAuto ? "Transcribe next 30 minutes" : null
+        }
+        onAction={awaitingNext && !chunkAuto ? transcribeNextChunk : null}
         actionDisabled={loading}
       />
       <div className="pointer-events-none fixed inset-0">

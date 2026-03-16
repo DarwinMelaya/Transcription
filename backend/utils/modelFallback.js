@@ -25,7 +25,23 @@ export function isRetryableModelError(err) {
   );
 }
 
-export async function runWithModelFallback({ models, run }) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function computeBackoffMs(attempt, baseDelayMs, maxDelayMs) {
+  const exp = Math.min(maxDelayMs, baseDelayMs * 2 ** Math.max(0, attempt));
+  const jitter = 0.2 * exp * (Math.random() * 2 - 1); // +/- 20%
+  return Math.max(0, Math.round(exp + jitter));
+}
+
+export async function runWithModelFallback({
+  models,
+  run,
+  maxRetriesPerModel = 2,
+  baseDelayMs = 800,
+  maxDelayMs = 8_000,
+}) {
   const list = normalizeModels(models);
   if (!list.length) {
     throw new Error("No models configured for fallback.");
@@ -33,13 +49,22 @@ export async function runWithModelFallback({ models, run }) {
 
   const errors = [];
   for (const model of list) {
-    try {
-      const result = await run(model);
-      return { result, modelUsed: model, attemptedModels: list };
-    } catch (err) {
-      errors.push({ model, err });
-      if (!isRetryableModelError(err)) {
-        throw err;
+    let attempt = 0;
+    // Retry the same model a few times for transient errors (503/429/etc).
+    while (attempt <= maxRetriesPerModel) {
+      try {
+        const result = await run(model);
+        return { result, modelUsed: model, attemptedModels: list };
+      } catch (err) {
+        errors.push({ model, err });
+        if (!isRetryableModelError(err)) {
+          throw err;
+        }
+
+        if (attempt >= maxRetriesPerModel) break;
+        const delay = computeBackoffMs(attempt, baseDelayMs, maxDelayMs);
+        await sleep(delay);
+        attempt += 1;
       }
     }
   }

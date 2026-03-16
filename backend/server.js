@@ -8,7 +8,8 @@ const app = express();
 app.use(cors());
 app.use(
   express.json({
-    limit: "2mb",
+    // Summaries can include large transcripts; keep room for long bodies.
+    limit: process.env.JSON_BODY_LIMIT || "12mb",
   }),
 );
 const PORT = process.env.PORT || 3000;

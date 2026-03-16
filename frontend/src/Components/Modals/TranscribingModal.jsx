@@ -3,6 +3,7 @@ const TranscribingModal = ({
   fileName,
   subtitle,
   progressLabel,
+  modelLabel,
   actionLabel,
   onAction,
   actionDisabled = false,
@@ -45,6 +46,12 @@ const TranscribingModal = ({
             {progressLabel && (
               <p className="mt-2 text-xs font-semibold text-white/55">
                 {progressLabel}
+              </p>
+            )}
+
+            {modelLabel && (
+              <p className="mt-2 text-xs font-semibold text-white/45">
+                Model: <span className="text-white/65">{modelLabel}</span>
               </p>
             )}
           </div>

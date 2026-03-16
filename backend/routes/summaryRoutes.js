@@ -1,7 +1,6 @@
 import express from "express";
 import puppeteer from "puppeteer";
-import { ai } from "../config/aiClient.js";
-import { buildSummaryHtml, toSafePdfFilename } from "../services/summaryService.js";
+import { buildSummaryHtml, summarizeTranscriptMarkdown, toSafePdfFilename } from "../services/summaryService.js";
 
 const router = express.Router();
 
@@ -74,21 +73,14 @@ router.post("/summarize", async (req, res) => {
   );
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 4096,
-      },
-      contents: [{ role: "user", parts: [{ text: directives.join("\n") }] }],
+    const { summary, modelUsed } = await summarizeTranscriptMarkdown({
+      directivesText: directives.join("\n"),
     });
-
-    const summary = response.text?.trim?.() ?? "";
     if (!summary) {
       return res.status(500).json({ error: "No summary returned from model." });
     }
 
-    return res.json({ summary });
+    return res.json({ summary, modelUsed });
   } catch (err) {
     console.error("Summarization error:", err);
 

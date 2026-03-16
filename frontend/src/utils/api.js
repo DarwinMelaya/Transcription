@@ -18,10 +18,12 @@ export async function transcribeAudio(file) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || "Failed to transcribe audio.");
+    const err = new Error(data.error || "Failed to transcribe audio.");
+    err.status = res.status;
+    throw err;
   }
 
-  return { transcript: data.transcript ?? "" };
+  return { transcript: data.transcript ?? "", modelUsed: data.modelUsed ?? null };
 }
 
 /**
@@ -67,7 +69,9 @@ export async function transcribeChunkPart(jobId, partIndex) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || "Failed to transcribe chunk part.");
+    const err = new Error(data.error || "Failed to transcribe chunk part.");
+    err.status = res.status;
+    throw err;
   }
 
   return {
@@ -75,6 +79,7 @@ export async function transcribeChunkPart(jobId, partIndex) {
     partIndex: data.partIndex ?? partIndex,
     totalParts: data.totalParts ?? 0,
     done: Boolean(data.done),
+    modelUsed: data.modelUsed ?? null,
   };
 }
 
@@ -92,7 +97,9 @@ export async function finalizeChunkedTranscription(jobId) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || "Failed to finalize chunked transcription.");
+    const err = new Error(data.error || "Failed to finalize chunked transcription.");
+    err.status = res.status;
+    throw err;
   }
 
   return { transcript: data.transcript ?? "" };
@@ -121,10 +128,12 @@ export async function summarizeTranscript(transcript, options = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || "Failed to summarize transcript.");
+    const err = new Error(data.error || "Failed to summarize transcript.");
+    err.status = res.status;
+    throw err;
   }
 
-  return { summary: data.summary ?? "" };
+  return { summary: data.summary ?? "", modelUsed: data.modelUsed ?? null };
 }
 
 /**

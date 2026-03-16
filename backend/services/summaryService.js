@@ -1,4 +1,30 @@
 import { marked } from "marked";
+import { ai } from "../config/aiClient.js";
+import { modelsFromEnv, runWithModelFallback } from "../utils/modelFallback.js";
+
+const SUMMARIZE_MODELS = modelsFromEnv(process.env.GEMINI_SUMMARIZE_MODELS, [
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-2.0-flash",
+]);
+
+export async function summarizeTranscriptMarkdown({ directivesText }) {
+  const { result: response, modelUsed } = await runWithModelFallback({
+    models: SUMMARIZE_MODELS,
+    run: (model) =>
+      ai.models.generateContent({
+        model,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 4096,
+        },
+        contents: [{ role: "user", parts: [{ text: directivesText }] }],
+      }),
+  });
+
+  const summary = response.text?.trim?.() ?? "";
+  return { summary, modelUsed };
+}
 
 export function toSafePdfFilename(name) {
   const base = typeof name === "string" ? name.trim() : "";

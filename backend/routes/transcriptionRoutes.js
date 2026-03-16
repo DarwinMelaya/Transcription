@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { probeDurationSeconds, segmentAudioToParts, transcribeLocalAudioFile } from "../services/transcriptionService.js";
 import { chunkJobs, CHUNK_SECONDS } from "../jobs/chunkJobsStore.js";
 import { safeUnlink, safeRmDir } from "../utils/fileUtils.js";
@@ -21,7 +22,7 @@ router.post("/transcribe", upload.single("audio"), async (req, res) => {
   const mimeType = req.file.mimetype || "audio/mpeg";
 
   try {
-    const cleanedTranscript = await transcribeLocalAudioFile({
+    const { transcript: cleanedTranscript, modelUsed } = await transcribeLocalAudioFile({
       filePath: tempPath,
       mimeType,
     });
@@ -32,7 +33,7 @@ router.post("/transcribe", upload.single("audio"), async (req, res) => {
         .json({ error: "No transcript returned from model." });
     }
 
-    res.json({ transcript: cleanedTranscript });
+    res.json({ transcript: cleanedTranscript, modelUsed });
   } catch (err) {
     console.error("Transcription error:", err);
 
@@ -130,11 +131,12 @@ router.post("/transcribe/part", async (req, res) => {
 
   try {
     if (!job.transcripts[idx]) {
-      const t = await transcribeLocalAudioFile({
+      const { transcript: t, modelUsed } = await transcribeLocalAudioFile({
         filePath: job.parts[idx],
         mimeType: job.mimeType,
       });
       job.transcripts[idx] = t || "";
+      job.lastModelUsed = modelUsed || job.lastModelUsed || null;
       chunkJobs.set(jobId, job);
     }
 
@@ -143,6 +145,7 @@ router.post("/transcribe/part", async (req, res) => {
       totalParts: job.parts.length,
       transcriptPart: job.transcripts[idx] ?? "",
       done: job.transcripts.filter(Boolean).length === job.parts.length,
+      modelUsed: job.lastModelUsed || null,
     });
   } catch (err) {
     console.error("Chunk part transcription error:", err);

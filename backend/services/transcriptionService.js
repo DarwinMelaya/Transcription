@@ -5,6 +5,7 @@ import ffmpegPath from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
 import { ai } from "../config/aiClient.js";
 import { CHUNK_SECONDS } from "../jobs/chunkJobsStore.js";
+import { modelsFromEnv, runWithModelFallback } from "../utils/modelFallback.js";
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobeStatic.path);
@@ -46,49 +47,58 @@ export function segmentAudioToParts({ inputPath, outputDir }) {
   });
 }
 
+const TRANSCRIBE_MODELS = modelsFromEnv(process.env.GEMINI_TRANSCRIBE_MODELS, [
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-2.0-flash",
+]);
+
 export async function transcribeLocalAudioFile({ filePath, mimeType }) {
   const uploadedFile = await ai.files.upload({
     file: filePath,
     config: { mimeType },
   });
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    generationConfig: {
-      temperature: 0,
-      maxOutputTokens: 8192,
-    },
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            fileData: {
-              fileUri: uploadedFile.uri,
-              mimeType: uploadedFile.mimeType,
-            },
-          },
-          {
-            text:
-              "You are a professional meeting transcription engine similar to Plaud AI. " +
-              "Transcribe this audio as accurately and verbatim as possible. The audio may be in Tagalog, English, or a mix of both; " +
-              "preserve Tagalog and English words and sentences exactly as spoken and do NOT translate or summarize. " +
-              "Lightly clean the transcript only by fixing capitalization and punctuation and removing obvious filler interjections like “uh/um” or repeated stutters when they are not meaningful. " +
-              "Keep sentence order and speaker wording faithful to the original audio. " +
-              "Return only the cleaned transcript text, without any explanations or extra formatting.",
-          },
-        ],
+  const promptParts = [
+    {
+      fileData: {
+        fileUri: uploadedFile.uri,
+        mimeType: uploadedFile.mimeType,
       },
-    ],
+    },
+    {
+      text:
+        "You are a professional meeting transcription engine similar to Plaud AI. " +
+        "Transcribe this audio as accurately and verbatim as possible. The audio may be in Tagalog, English, or a mix of both; " +
+        "preserve Tagalog and English words and sentences exactly as spoken and do NOT translate or summarize. " +
+        "Lightly clean the transcript only by fixing capitalization and punctuation and removing obvious filler interjections like “uh/um” or repeated stutters when they are not meaningful. " +
+        "Keep sentence order and speaker wording faithful to the original audio. " +
+        "Return only the cleaned transcript text, without any explanations or extra formatting.",
+    },
+  ];
+
+  const { result: response, modelUsed } = await runWithModelFallback({
+    models: TRANSCRIBE_MODELS,
+    run: (model) =>
+      ai.models.generateContent({
+        model,
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: 8192,
+        },
+        contents: [{ role: "user", parts: promptParts }],
+      }),
   });
 
   const rawTranscript = response.text?.trim?.() ?? "";
-  if (!rawTranscript) return "";
+  if (!rawTranscript) return { transcript: "", modelUsed };
 
-  return rawTranscript
+  const transcript = rawTranscript
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .join("\n\n");
+
+  return { transcript, modelUsed };
 }
 

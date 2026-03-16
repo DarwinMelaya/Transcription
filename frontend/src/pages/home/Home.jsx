@@ -14,6 +14,7 @@ const Home = () => {
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [transcribeModelUsed, setTranscribeModelUsed] = useState(null);
   const [audioDurationSeconds, setAudioDurationSeconds] = useState(null);
   const [audioDurationLoading, setAudioDurationLoading] = useState(false);
   const [chunkJob, setChunkJob] = useState(null); // { jobId, totalParts }
@@ -25,6 +26,7 @@ const Home = () => {
   const [summary, setSummary] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState("");
+  const [summaryModelUsed, setSummaryModelUsed] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
 
@@ -62,8 +64,10 @@ const Home = () => {
     setFile(e.target.files?.[0] ?? null);
     setTranscript("");
     setError("");
+    setTranscribeModelUsed(null);
     setSummary("");
     setSummaryError("");
+    setSummaryModelUsed(null);
     setAudioDurationSeconds(null);
     setChunkJob(null);
     setChunkPartIndex(0);
@@ -123,10 +127,11 @@ const Home = () => {
     setAwaitingNext(false);
 
     try {
-      const { transcriptPart } = await transcribeChunkPart(
+      const { transcriptPart, modelUsed } = await transcribeChunkPart(
         chunkJob.jobId,
         chunkPartIndex,
       );
+      if (modelUsed) setTranscribeModelUsed(modelUsed);
 
       setChunkParts((prev) => {
         const next = [...prev];
@@ -166,8 +171,10 @@ const Home = () => {
     setLoading(true);
     setError("");
     setTranscript("");
+    setTranscribeModelUsed(null);
     setSummary("");
     setSummaryError("");
+    setSummaryModelUsed(null);
     setChunkJob(null);
     setChunkPartIndex(0);
     setChunkParts([]);
@@ -192,8 +199,9 @@ const Home = () => {
         return;
       }
 
-      const { transcript: text } = await transcribeAudio(file);
+      const { transcript: text, modelUsed } = await transcribeAudio(file);
       setTranscript(text || "");
+      if (modelUsed) setTranscribeModelUsed(modelUsed);
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {
@@ -237,15 +245,17 @@ const Home = () => {
     setSummaryError("");
     setPdfError("");
     setSummary("");
+    setSummaryModelUsed(null);
 
     try {
-      const { summary: s } = await summarizeTranscript(transcript, {
+      const { summary: s, modelUsed } = await summarizeTranscript(transcript, {
         builtInPrompt,
         documentType,
         responseStyle,
         extraNotes,
       });
       setSummary(s || "");
+      if (modelUsed) setSummaryModelUsed(modelUsed);
     } catch (err) {
       setSummaryError(err.message || "Failed to generate summary.");
     } finally {
@@ -292,8 +302,10 @@ const Home = () => {
     setTranscript("");
     setError("");
     setFile(null);
+    setTranscribeModelUsed(null);
     setSummary("");
     setSummaryError("");
+    setSummaryModelUsed(null);
     setPdfError("");
     setChunkJob(null);
     setChunkPartIndex(0);
@@ -323,6 +335,7 @@ const Home = () => {
             ? `Part ${Math.min(chunkPartIndex + (loading ? 1 : 0), chunkJob.totalParts)} of ${chunkJob.totalParts}`
             : null
         }
+        modelLabel={transcribeModelUsed || null}
         actionLabel={awaitingNext ? "Transcribe next 30 minutes" : null}
         onAction={awaitingNext ? transcribeNextChunk : null}
         actionDisabled={loading}
@@ -445,11 +458,21 @@ const Home = () => {
               <div className="mt-6">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-white/50">OUTPUT</p>
-                  <p className="text-xs text-white/40">
-                    {transcript
-                      ? `${transcript.length.toLocaleString()} chars`
-                      : "—"}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    {transcribeModelUsed && (
+                      <p className="text-xs text-white/45">
+                        Model:{" "}
+                        <span className="font-semibold text-white/60">
+                          {transcribeModelUsed}
+                        </span>
+                      </p>
+                    )}
+                    <p className="text-xs text-white/40">
+                      {transcript
+                        ? `${transcript.length.toLocaleString()} chars`
+                        : "—"}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="mt-3">
@@ -662,6 +685,14 @@ const Home = () => {
                     </button>
                   </div>
                 </div>
+                {summaryModelUsed && (
+                  <p className="mt-2 text-xs text-white/45">
+                    Model:{" "}
+                    <span className="font-semibold text-white/60">
+                      {summaryModelUsed}
+                    </span>
+                  </p>
+                )}
 
                 <div className="mt-3">
                   {summary ? (

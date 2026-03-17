@@ -167,7 +167,13 @@ export async function summarizeTranscript(transcript, options = {}) {
     maxRetries: 2,
   });
 
-  return { summary: data.summary ?? "", modelUsed: data.modelUsed ?? null };
+  return {
+    summary: data.summary ?? "",
+    modelUsed: data.modelUsed ?? null,
+    condensed: Boolean(data.condensed),
+    condensedChunks:
+      typeof data.condensedChunks === "number" ? data.condensedChunks : 0,
+  };
 }
 
 /**

@@ -30,6 +30,8 @@ const Home = () => {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState("");
   const [summaryModelUsed, setSummaryModelUsed] = useState(null);
+  const [summaryCondensed, setSummaryCondensed] = useState(false);
+  const [summaryCondensedChunks, setSummaryCondensedChunks] = useState(0);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
 
@@ -284,9 +286,12 @@ const Home = () => {
     setPdfError("");
     setSummary("");
     setSummaryModelUsed(null);
+    setSummaryCondensed(false);
+    setSummaryCondensedChunks(0);
 
     try {
-      const { summary: s, modelUsed } = await summarizeTranscript(transcript, {
+      const { summary: s, modelUsed, condensed, condensedChunks } =
+        await summarizeTranscript(transcript, {
         builtInPrompt,
         documentType,
         responseStyle,
@@ -294,6 +299,10 @@ const Home = () => {
       });
       setSummary(s || "");
       if (modelUsed) setSummaryModelUsed(modelUsed);
+      setSummaryCondensed(Boolean(condensed));
+      setSummaryCondensedChunks(
+        typeof condensedChunks === "number" ? condensedChunks : 0,
+      );
     } catch (err) {
       setSummaryError(err.message || "Failed to generate summary.");
     } finally {
@@ -344,6 +353,8 @@ const Home = () => {
     setSummary("");
     setSummaryError("");
     setSummaryModelUsed(null);
+    setSummaryCondensed(false);
+    setSummaryCondensedChunks(0);
     setPdfError("");
     setChunkJob(null);
     setChunkPartIndex(0);
@@ -739,6 +750,15 @@ const Home = () => {
                     <span className="font-semibold text-white/60">
                       {summaryModelUsed}
                     </span>
+                  </p>
+                )}
+                {summaryCondensed && (
+                  <p className="mt-1 text-xs text-white/45">
+                    Long transcript detected: auto-condensed
+                    {summaryCondensedChunks > 0
+                      ? ` from ${summaryCondensedChunks} chunks`
+                      : ""}
+                    .
                   </p>
                 )}
 

@@ -1,6 +1,11 @@
 import express from "express";
 import puppeteer from "puppeteer";
-import { buildSummaryHtml, summarizeTranscriptMarkdown, toSafePdfFilename } from "../services/summaryService.js";
+import {
+  buildSummaryHtml,
+  condenseTranscriptForSummary,
+  summarizeTranscriptMarkdown,
+  toSafePdfFilename,
+} from "../services/summaryService.js";
 
 const router = express.Router();
 
@@ -19,9 +24,12 @@ router.post("/summarize", async (req, res) => {
     return res.status(400).json({ error: "Transcript text is required." });
   }
 
-  if (text.length > 200_000) {
+  // Keep a hard stop far above normal usage to avoid memory abuse.
+  // Express JSON body limit (default 12mb) is the primary protection.
+  if (text.length > 6_000_000) {
     return res.status(413).json({
-      error: "Transcript is too long. Please use a shorter transcript.",
+      error:
+        "Transcript is too large for a single request. Please split it or increase JSON_BODY_LIMIT on the server.",
     });
   }
 
@@ -37,6 +45,30 @@ router.post("/summarize", async (req, res) => {
     typeof builtInPrompt === "string"
       ? builtInPrompt.trim()
       : "Executive Minutes (Lite)";
+
+  let transcriptLabel = "TRANSCRIPT:";
+  let transcriptTextForModel = text;
+
+  // If it's long, condense it first (chunk notes) so we don't hit model limits.
+  // This also fulfills "use a shorter transcript" automatically.
+  const SHOULD_CONDENSE_OVER_CHARS = 180_000;
+  const condensedMeta = { condensed: false, condensedChunks: 0 };
+  try {
+    if (text.length > SHOULD_CONDENSE_OVER_CHARS) {
+      const { condensed, chunks } = await condenseTranscriptForSummary({
+        transcript: text,
+      });
+      if (condensed && condensed.trim()) {
+        transcriptLabel = "CONDENSED NOTES FROM FULL TRANSCRIPT (auto-generated):";
+        transcriptTextForModel = condensed.trim();
+        condensedMeta.condensed = true;
+        condensedMeta.condensedChunks = chunks;
+      }
+    }
+  } catch (err) {
+    // If condensing fails, fall back to trying direct summarization.
+    console.warn("Condense step failed; falling back to direct summarization:", err);
+  }
 
   const directives = [
     `DOCUMENT TYPE: ${safeDocType}`,
@@ -68,8 +100,8 @@ router.post("/summarize", async (req, res) => {
     "## Risks / Blockers",
     "## Next Steps",
     "",
-    "TRANSCRIPT:",
-    text,
+    transcriptLabel,
+    transcriptTextForModel,
   );
 
   try {
@@ -80,7 +112,7 @@ router.post("/summarize", async (req, res) => {
       return res.status(500).json({ error: "No summary returned from model." });
     }
 
-    return res.json({ summary, modelUsed });
+    return res.json({ summary, modelUsed, ...condensedMeta });
   } catch (err) {
     console.error("Summarization error:", err);
 

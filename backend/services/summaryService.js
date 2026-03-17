@@ -26,6 +26,124 @@ export async function summarizeTranscriptMarkdown({ directivesText }) {
   return { summary, modelUsed };
 }
 
+function clampInt(n, min, max) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(x)));
+}
+
+function splitIntoChunks(text, { maxChars = 24_000, overlapChars = 600 } = {}) {
+  const src = typeof text === "string" ? text : "";
+  if (!src.trim()) return [];
+
+  const maxC = clampInt(maxChars, 4_000, 120_000);
+  const overlap = clampInt(overlapChars, 0, Math.floor(maxC / 3));
+
+  const chunks = [];
+  let start = 0;
+  while (start < src.length) {
+    let end = Math.min(src.length, start + maxC);
+
+    // Prefer cutting on paragraph boundary near the end.
+    const windowStart = Math.max(start, end - 1600);
+    const slice = src.slice(windowStart, end);
+    const boundaryRel = Math.max(slice.lastIndexOf("\n\n"), slice.lastIndexOf("\n"));
+    if (boundaryRel > 0) {
+      end = windowStart + boundaryRel;
+    }
+
+    const chunk = src.slice(start, end).trim();
+    if (chunk) chunks.push(chunk);
+
+    if (end >= src.length) break;
+    start = Math.max(0, end - overlap);
+  }
+
+  return chunks;
+}
+
+async function summarizeChunkNotes({ chunkText, chunkIndex, totalChunks }) {
+  const directives = [
+    "TASK: Create compact notes from this transcript chunk.",
+    "",
+    "RULES:",
+    "- Output must be Markdown.",
+    "- Only extract what is present; never invent details.",
+    "- Keep it dense: bullets over paragraphs.",
+    "- Preserve names/terms exactly (Tagalog/English mixed is ok).",
+    "- Prefer concrete facts: decisions, action items, owners, dates, numbers, risks.",
+    "- If something is unclear, write 'Not specified'.",
+    "",
+    `CHUNK: ${chunkIndex + 1} / ${totalChunks}`,
+    "",
+    "OUTPUT FORMAT (Markdown):",
+    "### Key facts",
+    "- ...",
+    "",
+    "### Decisions",
+    "- ...",
+    "",
+    "### Action items (with owner if mentioned)",
+    "- ...",
+    "",
+    "### Risks / blockers",
+    "- ...",
+    "",
+    "TRANSCRIPT CHUNK:",
+    chunkText,
+  ].join("\n");
+
+  const { result: response, modelUsed } = await runWithModelFallback({
+    models: SUMMARIZE_MODELS,
+    run: (model) =>
+      ai.models.generateContent({
+        model,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 900,
+        },
+        contents: [{ role: "user", parts: [{ text: directives }] }],
+      }),
+  });
+
+  return { notes: response.text?.trim?.() ?? "", modelUsed };
+}
+
+export async function condenseTranscriptForSummary({
+  transcript,
+  maxCharsPerChunk = 24_000,
+  overlapChars = 600,
+  maxTotalChunks = 80,
+}) {
+  const text = typeof transcript === "string" ? transcript.trim() : "";
+  if (!text) return { condensed: "", chunks: 0, modelUsed: null };
+
+  const chunks = splitIntoChunks(text, {
+    maxChars: maxCharsPerChunk,
+    overlapChars,
+  }).slice(0, clampInt(maxTotalChunks, 1, 200));
+
+  let lastModelUsed = null;
+  const notesBlocks = [];
+
+  for (let i = 0; i < chunks.length; i += 1) {
+    // sequential on purpose (keeps provider happy + easier backpressure)
+    const { notes, modelUsed } = await summarizeChunkNotes({
+      chunkText: chunks[i],
+      chunkIndex: i,
+      totalChunks: chunks.length,
+    });
+    lastModelUsed = modelUsed || lastModelUsed;
+    notesBlocks.push(`## Chunk ${i + 1}\n\n${notes || "*No notes returned.*"}`);
+  }
+
+  return {
+    condensed: notesBlocks.join("\n\n"),
+    chunks: chunks.length,
+    modelUsed: lastModelUsed,
+  };
+}
+
 export function toSafePdfFilename(name) {
   const base = typeof name === "string" ? name.trim() : "";
   const cleaned = (base || "summary")

@@ -1,8 +1,8 @@
-import fs from "node:fs";
-import path from "node:path";
-import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
+import ffmpeg from "fluent-ffmpeg";
+import fs from "node:fs";
+import path from "node:path";
 import { ai } from "../config/aiClient.js";
 import { CHUNK_SECONDS } from "../jobs/chunkJobsStore.js";
 import { modelsFromEnv, runWithModelFallback } from "../utils/modelFallback.js";
@@ -51,6 +51,14 @@ const TRANSCRIBE_MODELS = modelsFromEnv(process.env.GEMINI_TRANSCRIBE_MODELS, [
   "gemini-2.5-flash",
   "gemini-2.5-pro",
   "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash-001",
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash-exp",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash-lite-preview-06-17",
+  "gemini-2.5-pro-preview",
+  "gemini-2.5-pro-exp-03-25",
 ]);
 
 export async function transcribeLocalAudioFile({ filePath, mimeType }) {
@@ -101,4 +109,3 @@ export async function transcribeLocalAudioFile({ filePath, mimeType }) {
 
   return { transcript, modelUsed };
 }
-

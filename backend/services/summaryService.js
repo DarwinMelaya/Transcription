@@ -144,6 +144,43 @@ export async function condenseTranscriptForSummary({
   };
 }
 
+/**
+ * Generate compact notes from an entire transcript.
+ * - For very long transcripts, returns condensed chunk notes.
+ * - For short transcripts, summarizes as a single chunk.
+ */
+export async function summarizeTranscriptNotes({ transcript }) {
+  const text = typeof transcript === "string" ? transcript.trim() : "";
+  if (!text) return { notes: "", modelUsed: null, condensed: false, condensedChunks: 0 };
+
+  // Keep a similar threshold as routes use to avoid model limits.
+  const SHOULD_CONDENSE_OVER_CHARS = 180_000;
+  if (text.length > SHOULD_CONDENSE_OVER_CHARS) {
+    const { condensed, chunks, modelUsed } = await condenseTranscriptForSummary({
+      transcript: text,
+    });
+    return {
+      notes: condensed || "",
+      modelUsed: modelUsed || null,
+      condensed: true,
+      condensedChunks: typeof chunks === "number" ? chunks : 0,
+    };
+  }
+
+  // Short transcript: treat as a single chunk of notes.
+  const { notes, modelUsed } = await summarizeChunkNotes({
+    chunkText: text,
+    chunkIndex: 0,
+    totalChunks: 1,
+  });
+  return {
+    notes: notes || "",
+    modelUsed: modelUsed || null,
+    condensed: false,
+    condensedChunks: 0,
+  };
+}
+
 export function toSafePdfFilename(name) {
   const base = typeof name === "string" ? name.trim() : "";
   const cleaned = (base || "summary")

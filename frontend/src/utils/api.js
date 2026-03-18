@@ -8,6 +8,13 @@ function isRetryableStatus(status) {
   return status === 429 || status === 503;
 }
 
+function isNonRetryableQuotaError(status, data) {
+  if (status !== 429) return false;
+  const msg = String(data?.error || "").toLowerCase();
+  // If the project is genuinely out of quota / billing disabled, retries only waste time.
+  return msg.includes("plan") || msg.includes("billing") || msg.includes("out of quota");
+}
+
 async function fetchJsonWithTimeout(url, options = {}) {
   const {
     timeoutMs = 120_000,
@@ -29,7 +36,11 @@ async function fetchJsonWithTimeout(url, options = {}) {
         const err = new Error(data.error || "Request failed.");
         err.status = res.status;
         err.data = data;
-        if (isRetryableStatus(res.status) && attempt < maxRetries) {
+        if (
+          isRetryableStatus(res.status) &&
+          !isNonRetryableQuotaError(res.status, data) &&
+          attempt < maxRetries
+        ) {
           const delay = Math.min(8000, retryBaseDelayMs * 2 ** attempt);
           await sleep(delay);
           attempt += 1;
@@ -198,4 +209,27 @@ export async function exportSummaryPdf(summary, options = {}) {
   }
 
   return await res.blob();
+}
+
+/**
+ * Generate compact notes from a transcript.
+ * @param {string} transcript
+ * @returns {Promise<{ notes: string, modelUsed: string | null, condensed: boolean, condensedChunks: number }>}
+ */
+export async function summarizeNotes(transcript) {
+  const { data } = await fetchJsonWithTimeout(`${API_BASE}/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript }),
+    timeoutMs: 5 * 60_000,
+    maxRetries: 2,
+  });
+
+  return {
+    notes: data.notes ?? "",
+    modelUsed: data.modelUsed ?? null,
+    condensed: Boolean(data.condensed),
+    condensedChunks:
+      typeof data.condensedChunks === "number" ? data.condensedChunks : 0,
+  };
 }

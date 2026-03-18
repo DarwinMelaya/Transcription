@@ -4,6 +4,7 @@ import {
   finalizeChunkedTranscription,
   startChunkedTranscription,
   summarizeTranscript,
+  summarizeNotes,
   transcribeAudio,
   transcribeChunkPart,
 } from "../../utils/api";
@@ -34,6 +35,14 @@ const Home = () => {
   const [summaryCondensedChunks, setSummaryCondensedChunks] = useState(0);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
+
+  // Notes state
+  const [notes, setNotes] = useState("");
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState("");
+  const [notesModelUsed, setNotesModelUsed] = useState(null);
+  const [notesCondensed, setNotesCondensed] = useState(false);
+  const [notesCondensedChunks, setNotesCondensedChunks] = useState(0);
 
   const [builtInPrompt, setBuiltInPrompt] = useState(
     "Executive Minutes (Lite)",
@@ -74,6 +83,11 @@ const Home = () => {
     setSummaryError("");
     setSummaryModelUsed(null);
     setAudioDurationSeconds(null);
+    setNotes("");
+    setNotesError("");
+    setNotesModelUsed(null);
+    setNotesCondensed(false);
+    setNotesCondensedChunks(0);
     setChunkJob(null);
     setChunkPartIndex(0);
     setChunkParts([]);
@@ -214,6 +228,11 @@ const Home = () => {
     setSummary("");
     setSummaryError("");
     setSummaryModelUsed(null);
+    setNotes("");
+    setNotesError("");
+    setNotesModelUsed(null);
+    setNotesCondensed(false);
+    setNotesCondensedChunks(0);
     setChunkJob(null);
     setChunkPartIndex(0);
     setChunkParts([]);
@@ -345,6 +364,70 @@ const Home = () => {
     }
   };
 
+  const handleGenerateNotes = async () => {
+    if (!transcript.trim()) {
+      setNotesError("Please generate a transcript first.");
+      return;
+    }
+
+    setNotesLoading(true);
+    setNotesError("");
+    setPdfError("");
+    setNotes("");
+    setNotesModelUsed(null);
+    setNotesCondensed(false);
+    setNotesCondensedChunks(0);
+
+    try {
+      const { notes: n, modelUsed, condensed, condensedChunks } =
+        await summarizeNotes(transcript);
+      setNotes(n || "");
+      if (modelUsed) setNotesModelUsed(modelUsed);
+      setNotesCondensed(Boolean(condensed));
+      setNotesCondensedChunks(
+        typeof condensedChunks === "number" ? condensedChunks : 0,
+      );
+    } catch (err) {
+      setNotesError(err.message || "Failed to generate notes.");
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  const handleExportNotesPdf = async () => {
+    if (!notes.trim()) {
+      setPdfError("Please generate notes first.");
+      return;
+    }
+
+    setPdfLoading(true);
+    setPdfError("");
+
+    try {
+      const blob = await exportSummaryPdf(notes, {
+        title: `${transcriptBaseName}-notes`,
+      });
+
+      const pdfBlob =
+        blob && blob.type === "application/pdf"
+          ? blob
+          : new Blob([blob], { type: "application/pdf" });
+
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${transcriptBaseName}-notes.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (err) {
+      setPdfError(err.message || "Failed to export PDF.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const handleClear = () => {
     setTranscript("");
     setError("");
@@ -362,6 +445,11 @@ const Home = () => {
     setAwaitingNext(false);
     setChunked(false);
     setChunkProgressPercent(0);
+    setNotes("");
+    setNotesError("");
+    setNotesModelUsed(null);
+    setNotesCondensed(false);
+    setNotesCondensedChunks(0);
   };
 
   const transcriptBaseName = file?.name
@@ -778,6 +866,100 @@ const Home = () => {
                       </p>
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div className="mt-6 border-t border-white/10 pt-6">
+                {notesError && (
+                  <div className="mb-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {notesError}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={handleGenerateNotes}
+                    disabled={notesLoading || !transcript}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#070A12] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                  >
+                    {notesLoading && (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#070A12]/40 border-t-[#070A12]" />
+                    )}
+                    Generate Notes
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportNotesPdf}
+                    disabled={pdfLoading || !notes}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                  >
+                    {pdfLoading && (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white/80" />
+                    )}
+                    Export Notes PDF
+                  </button>
+                </div>
+
+                <div className="pt-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-white/50">NOTES</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(notes)}
+                        disabled={!notes}
+                        className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Copy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDownload(notes, `${transcriptBaseName}-notes`)
+                        }
+                        disabled={!notes}
+                        className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Download
+                      </button>
+                    </div>
+                  </div>
+                  {notesModelUsed && (
+                    <p className="mt-2 text-xs text-white/45">
+                      Model:{" "}
+                      <span className="font-semibold text-white/60">
+                        {notesModelUsed}
+                      </span>
+                    </p>
+                  )}
+                  {notesCondensed && (
+                    <p className="mt-1 text-xs text-white/45">
+                      Long transcript detected: auto-condensed
+                      {notesCondensedChunks > 0
+                        ? ` from ${notesCondensedChunks} chunks`
+                        : ""}
+                      .
+                    </p>
+                  )}
+
+                  <div className="mt-3">
+                    {notes ? (
+                      <div className="max-h-[22rem] overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/80 whitespace-pre-wrap">
+                        {notes}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-white/15 bg-black/10 p-8 text-center">
+                        <p className="text-sm font-semibold text-white/80">
+                          No notes yet
+                        </p>
+                        <p className="mt-1 text-xs text-white/50">
+                          Generate a transcript first, then click Generate Notes.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

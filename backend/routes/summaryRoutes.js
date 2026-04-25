@@ -74,6 +74,11 @@ router.post("/summarize", async (req, res) => {
   let transcriptLabel = "TRANSCRIPT:";
   let transcriptTextForModel = text;
 
+  const narrativeRequested =
+    /narrative\s*report/i.test(safeBuiltIn) ||
+    /narrative\s*report/i.test(safeDocType) ||
+    /forum\s*narrative/i.test(safeDocType);
+
   // If it's long, condense it first (chunk notes) so we don't hit model limits.
   // This also fulfills "use a shorter transcript" automatically.
   const SHOULD_CONDENSE_OVER_CHARS = 180_000;
@@ -113,17 +118,31 @@ router.post("/summarize", async (req, res) => {
 
   directives.push(
     "",
-    "OUTPUT FORMAT (Markdown):",
-    "## Title",
-    "## Date/Time",
-    "## Attendees",
-    "## Agenda",
-    "## Executive Summary",
-    "## Key Points",
-    "## Decisions",
-    "## Action Items",
-    "## Risks / Blockers",
-    "## Next Steps",
+    ...(narrativeRequested
+      ? [
+          "OUTPUT FORMAT (Markdown):",
+          "## I. INTRODUCTION",
+          "## II. PRELIMINARIES",
+          "## III. FORUM DETAILS",
+          "### A. Participants",
+          "### B. Resource Speakers",
+          "### C. Topic Discussed",
+          "### D. Forum Methodologies",
+          "## IV. CONCLUSION",
+        ]
+      : [
+          "OUTPUT FORMAT (Markdown):",
+          "## Title",
+          "## Date/Time",
+          "## Attendees",
+          "## Agenda",
+          "## Executive Summary",
+          "## Key Points",
+          "## Decisions",
+          "## Action Items",
+          "## Risks / Blockers",
+          "## Next Steps",
+        ]),
     "",
     transcriptLabel,
     transcriptTextForModel,

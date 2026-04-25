@@ -25,6 +25,18 @@ export function isRetryableModelError(err) {
   );
 }
 
+function isModelNotFoundOrUnsupportedError(err) {
+  const status = err?.status;
+  if (status === 404) return true;
+
+  const msg = String(err?.message || "").toLowerCase();
+  return (
+    (msg.includes("is not found") && msg.includes("models/")) ||
+    msg.includes("not supported for generatecontent") ||
+    msg.includes("unsupported for generatecontent")
+  );
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -57,6 +69,12 @@ export async function runWithModelFallback({
         return { result, modelUsed: model, attemptedModels: list };
       } catch (err) {
         errors.push({ model, err });
+        // If the model id is invalid or unsupported, immediately move on
+        // to the next model in the fallback list.
+        if (isModelNotFoundOrUnsupportedError(err)) {
+          break;
+        }
+
         if (!isRetryableModelError(err)) {
           throw err;
         }

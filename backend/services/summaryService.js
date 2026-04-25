@@ -3,9 +3,8 @@ import { ai } from "../config/aiClient.js";
 import { modelsFromEnv, runWithModelFallback } from "../utils/modelFallback.js";
 
 const SUMMARIZE_MODELS = modelsFromEnv(process.env.GEMINI_SUMMARIZE_MODELS, [
+  // Prefer free-tier / low-cost models first.
   "gemini-2.5-flash",
-  "gemini-2.5-pro",
-  "gemini-2.0-flash",
 ]);
 
 export async function summarizeTranscriptMarkdown({ directivesText }) {
@@ -47,7 +46,10 @@ function splitIntoChunks(text, { maxChars = 24_000, overlapChars = 600 } = {}) {
     // Prefer cutting on paragraph boundary near the end.
     const windowStart = Math.max(start, end - 1600);
     const slice = src.slice(windowStart, end);
-    const boundaryRel = Math.max(slice.lastIndexOf("\n\n"), slice.lastIndexOf("\n"));
+    const boundaryRel = Math.max(
+      slice.lastIndexOf("\n\n"),
+      slice.lastIndexOf("\n"),
+    );
     if (boundaryRel > 0) {
       end = windowStart + boundaryRel;
     }
@@ -151,14 +153,17 @@ export async function condenseTranscriptForSummary({
  */
 export async function summarizeTranscriptNotes({ transcript }) {
   const text = typeof transcript === "string" ? transcript.trim() : "";
-  if (!text) return { notes: "", modelUsed: null, condensed: false, condensedChunks: 0 };
+  if (!text)
+    return { notes: "", modelUsed: null, condensed: false, condensedChunks: 0 };
 
   // Keep a similar threshold as routes use to avoid model limits.
   const SHOULD_CONDENSE_OVER_CHARS = 180_000;
   if (text.length > SHOULD_CONDENSE_OVER_CHARS) {
-    const { condensed, chunks, modelUsed } = await condenseTranscriptForSummary({
-      transcript: text,
-    });
+    const { condensed, chunks, modelUsed } = await condenseTranscriptForSummary(
+      {
+        transcript: text,
+      },
+    );
     return {
       notes: condensed || "",
       modelUsed: modelUsed || null,

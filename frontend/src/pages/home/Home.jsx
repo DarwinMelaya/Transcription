@@ -662,7 +662,11 @@ const Home = () => {
                     BUILT-IN PROMPT
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {["Executive Minutes (Lite)", "Action Items (Lite)"].map(
+                    {[
+                      "Executive Minutes (Lite)",
+                      "Action Items (Lite)",
+                      "Narrative Report (Forum) (Lite)",
+                    ].map(
                       (opt) => (
                         <button
                           key={opt}
@@ -723,6 +727,12 @@ const Home = () => {
                     >
                       Technical Call Notes
                     </option>
+                    <option
+                      className="bg-[#070A12]"
+                      value="Forum Narrative Report"
+                    >
+                      Forum Narrative Report
+                    </option>
                   </select>
                 </div>
 
@@ -762,13 +772,23 @@ const Home = () => {
                   SPECIAL DIRECTIVES (LITE)
                 </p>
                 <p className="mt-2 text-xs leading-5 text-white/60">
-                  Write meeting minutes in Markdown. Do not invent details. If
-                  missing:{" "}
+                  Write meeting minutes or forum{" "}
+                  <span className="font-semibold text-white/70">
+                    Narrative Report
+                  </span>{" "}
+                  in Markdown. Do not invent details. If missing:{" "}
                   <span className="font-semibold text-white/70">
                     Not specified
                   </span>
                   . Include: Title, Date, Attendees, Agenda, Executive Summary,
-                  Key Points, Decisions, Action Items, Risks, Next Steps.
+                  Key Points, Decisions, Action Items, Risks, Next Steps. For
+                  Narrative Report (Forum), use sections:{" "}
+                  <span className="font-semibold text-white/70">
+                    I. INTRODUCTION, II. PRELIMINARIES, III. FORUM DETAILS - A.
+                    Participants, B. Resource Speakers, C. Topic Discussed, D.
+                    Forum Methodologies, IV. CONCLUSION
+                  </span>
+                  .
                 </p>
               </div>
 

@@ -7,7 +7,11 @@ const SUMMARIZE_MODELS = modelsFromEnv(process.env.GEMINI_SUMMARIZE_MODELS, [
   "gemini-2.5-flash",
 ]);
 
-export async function summarizeTranscriptMarkdown({ directivesText }) {
+export async function summarizeTranscriptMarkdown({
+  directivesText,
+  maxOutputTokens = 4096,
+} = {}) {
+  const tokens = clampInt(maxOutputTokens, 512, 65_536);
   const { result: response, modelUsed } = await runWithModelFallback({
     models: SUMMARIZE_MODELS,
     run: (model) =>
@@ -15,7 +19,7 @@ export async function summarizeTranscriptMarkdown({ directivesText }) {
         model,
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 4096,
+          maxOutputTokens: tokens,
         },
         contents: [{ role: "user", parts: [{ text: directivesText }] }],
       }),
@@ -197,10 +201,52 @@ export function toSafePdfFilename(name) {
   return `${cleaned || "summary"}.pdf`;
 }
 
+/** Markdown structure for DOST TNA Form 04–style output (matches assessment report flow). */
+export const TNA_FORM_04_MARKDOWN_DIRECTIVE = [
+  "OUTPUT FORMAT (Markdown) — mirror DOST TNA Form 04 narrative structure:",
+  "",
+  "# DOST TNA Form 04",
+  "## Department of Science and Technology",
+  "### TECHNOLOGY NEEDS ASSESSMENT (TNA) REPORT",
+  "",
+  "**COMPANY:** (entity assessed; use transcript or 'Not specified')",
+  "**ADDRESS:** (use transcript or 'Not specified')",
+  "",
+  "### SCOPE OF ASSESSMENT*",
+  "Intro line: The TNA covered the following areas:",
+  "Then numbered list 1–5 with lettered sub-items exactly as follows (use transcript content under each; if absent write **N/A** or a short 'Not specified'):",
+  "",
+  "1. Strategic Direction — a. Vision and mission — b. Plans and Objectives — c. Strategic alliances and current agreement",
+  "2. Management Aspect — a. Human resource management — b. Purchasing — c. Work environment — d. Corporate social responsibility — e. Occupational health and safety management",
+  "3. Technical Aspect — a. Operational and outsourcing practices (production system; production planning and control; production lay-out; work improvement; equipment management and maintenance; quality assurance system; outsourcing practices) — b. Product and Process Performance and Improvement — c. Environmental Management System (waste management)",
+  "4. Marketing Aspect — a. Marketing plan — b. Market outlets and number — c. Promotional strategies — d. Market competitors — e. Packaging",
+  "5. Finance — a. Cash flow and other related documents — b. Sources of capital — c. Accounting system",
+  "",
+  "Footnote line: * Scope of TNA is based on Technology Assessment Plan (TAP)",
+  "",
+  "## Summary of Assessment",
+  "### Background",
+  "(Narrative paragraphs from transcript.)",
+  "### Methodology",
+  "(How assessment was done: interviews, ocular, documents, etc. — only if stated.)",
+  "",
+  "## Summary of Findings",
+  "Use the same numbering 1–5 and lettered sub-headings as in SCOPE. Under each sub-heading, write prose paragraphs (like the reference TNA report), not sparse bullets unless the transcript is list-like.",
+  "",
+  "## CONCLUSIONS:",
+  "Line: Based on the interview and ocular inspection the TNA team concludes the following;",
+  "Then bullet list (•) of concise conclusion statements grounded in the transcript.",
+  "",
+  "## RECOMMENDATIONS:",
+  "Line: The following are recommended by the TNA team:",
+  "Then bullet list (•) of actionable recommendations grounded in findings; if none stated, derive only conservative, general recommendations and label uncertain items 'Not specified in source'.",
+].join("\n");
+
 export function buildSummaryHtml({
   title = "Executive Summary",
   markdown = "",
-}) {
+  template = "default",
+} = {}) {
   const md = typeof markdown === "string" ? markdown : "";
   const safeTitle =
     typeof title === "string" && title.trim()
@@ -212,13 +258,55 @@ export function buildSummaryHtml({
     breaks: true,
   });
 
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${safeTitle}</title>
-    <style>
+  const isTna = template === "dost-tna-04";
+
+  const tnaCss = `
+      @page { size: A4; margin: 16mm 14mm 18mm 14mm; }
+      :root{ --ink:#111827; --line:#1f2937; --paper:#ffffff; }
+      *{ box-sizing:border-box; }
+      html,body{ height:100%; }
+      body{
+        margin:0;
+        font-family: "Times New Roman", Times, serif;
+        color:var(--ink);
+        background:var(--paper);
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        font-size: 11.5pt;
+        line-height: 1.45;
+      }
+      .tna-banner{
+        border: 2px solid var(--line);
+        padding: 10px 12px;
+        margin-bottom: 10mm;
+      }
+      .tna-banner .form-id{ font-weight: 700; font-size: 12pt; letter-spacing: 0.02em; }
+      .tna-banner .dept{ font-size: 10.5pt; margin-top: 2px; }
+      .tna-banner .report-title{
+        text-align:center;
+        font-weight: 700;
+        font-size: 11.5pt;
+        margin-top: 8px;
+        text-transform: uppercase;
+      }
+      .content h1, .content h2, .content h3, .content h4{
+        page-break-after: avoid;
+        font-family: "Times New Roman", Times, serif;
+        color: var(--ink);
+      }
+      .content h1{ font-size: 13pt; margin: 12px 0 6px 0; text-align: center; text-transform: uppercase; }
+      .content h2{ font-size: 12pt; margin: 14px 0 6px 0; border-bottom: 1px solid #000; padding-bottom: 2px; }
+      .content h3{ font-size: 11.5pt; margin: 10px 0 4px 0; font-weight: 700; }
+      .content h4{ font-size: 11pt; margin: 8px 0 4px 0; font-weight: 700; }
+      .content p{ margin: 0 0 8px 0; text-align: justify; }
+      .content ul, .content ol{ margin: 0 0 8px 22px; padding: 0; }
+      .content li{ margin: 3px 0; }
+      .content strong{ font-weight: 700; }
+      .content hr{ border: 0; border-top: 1px solid #9ca3af; margin: 10px 0; }
+      .content blockquote{ margin: 8px 0; padding-left: 10px; border-left: 2px solid #374151; }
+    `;
+
+  const defaultCss = `
       @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
       :root{
         --ink:#0b1220;
@@ -346,32 +434,18 @@ export function buildSummaryHtml({
         text-align: left;
         font-weight: 800;
       }
-      .footer{
-        position: fixed;
-        bottom: 10mm;
-        left: 16mm;
-        right: 16mm;
-        display:flex;
-        justify-content:space-between;
-        font-size: 10px;
-        color: var(--muted);
-        border-top: 1px solid var(--line);
-        padding-top: 6px;
-      }
-      .footer .dot{
-        display:inline-block;
-        width:6px;height:6px;
-        border-radius: 999px;
-        background: var(--accent);
-        margin-right:8px;
-        transform: translateY(-1px);
-        opacity:.7;
-      }
       a{ color: var(--accent); text-decoration: none; }
       hr{ border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
-    </style>
-  </head>
-  <body>
+    `;
+
+  const headerHtml = isTna
+    ? `
+    <div class="tna-banner">
+      <div class="form-id">DOST TNA Form 04</div>
+      <div class="dept">Department of Science and Technology</div>
+      <div class="report-title">Technology Needs Assessment (TNA) Report</div>
+    </div>`
+    : `
     <div class="header">
       <div class="brand">
         <div class="kicker">Transcript • Summary</div>
@@ -380,13 +454,24 @@ export function buildSummaryHtml({
       <div class="stamp">
         <div class="pill">Generated</div>
       </div>
-    </div>
+    </div>`;
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${safeTitle}</title>
+    <style>
+      ${isTna ? tnaCss : defaultCss}
+    </style>
+  </head>
+  <body>
+    ${headerHtml}
 
     <main class="content">
       ${contentHtml}
     </main>
-
-    
   </body>
 </html>`;
 }

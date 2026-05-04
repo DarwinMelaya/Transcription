@@ -5,6 +5,7 @@ import {
   condenseTranscriptForSummary,
   summarizeTranscriptMarkdown,
   summarizeTranscriptNotes,
+  TNA_FORM_04_MARKDOWN_DIRECTIVE,
   toSafePdfFilename,
 } from "../services/summaryService.js";
 
@@ -42,6 +43,7 @@ router.post("/summarize", async (req, res) => {
     responseStyle = "Concise, professional",
     extraNotes = "",
     builtInPrompt = "Executive Minutes (Lite)",
+    tnaMeta = null,
   } = req.body ?? {};
 
   const text = typeof transcript === "string" ? transcript.trim() : "";
@@ -78,6 +80,11 @@ router.post("/summarize", async (req, res) => {
     /narrative\s*report/i.test(safeBuiltIn) ||
     /narrative\s*report/i.test(safeDocType) ||
     /forum\s*narrative/i.test(safeDocType);
+
+  const tnaForm04Requested =
+    /tna\s*form\s*04/i.test(safeBuiltIn) ||
+    /dost\s*tna/i.test(safeBuiltIn) ||
+    /technology\s*needs\s*assessment/i.test(safeDocType);
 
   // If it's long, condense it first (chunk notes) so we don't hit model limits.
   // This also fulfills "use a shorter transcript" automatically.
@@ -116,47 +123,83 @@ router.post("/summarize", async (req, res) => {
     directives.push("", "EXTRA NOTES (USER):", safeExtraNotes);
   }
 
-  directives.push(
-    "",
-    ...(narrativeRequested
-      ? [
-          "OUTPUT FORMAT (Markdown):",
-          "## I. INTRODUCTION",
-          "## II. PRELIMINARIES",
-          "## III. FORUM DETAILS",
-          "### A. Participants",
-          "### B. Resource Speakers",
-          "### C. Topic Discussed",
-          "### D. Forum Methodologies",
-          "## IV. CONCLUSION",
-        ]
-      : [
-          "OUTPUT FORMAT (Markdown):",
-          "## Title",
-          "## Date/Time",
-          "## Attendees",
-          "## Agenda",
-          "## Executive Summary",
-          "## Key Points",
-          "## Decisions",
-          "## Action Items",
-          "## Risks / Blockers",
-          "## Next Steps",
-        ]),
-    "",
-    transcriptLabel,
-    transcriptTextForModel,
-  );
+  if (
+    tnaForm04Requested &&
+    tnaMeta &&
+    typeof tnaMeta === "object" &&
+    Object.keys(tnaMeta).length > 0
+  ) {
+    const m = tnaMeta;
+    const lines = [
+      "",
+      "KNOWN HEADER FIELDS (use in COMPANY/ADDRESS lines when provided; otherwise infer from transcript or 'Not specified'):",
+    ];
+    const pick = (k) =>
+      typeof m[k] === "string" ? m[k].trim() : "";
+    if (pick("company")) lines.push(`COMPANY (fixed): ${pick("company")}`);
+    if (pick("address")) lines.push(`ADDRESS (fixed): ${pick("address")}`);
+    if (pick("reportNo")) lines.push(`Report No (if applicable): ${pick("reportNo")}`);
+    if (pick("auditDates")) lines.push(`Audit Date(s): ${pick("auditDates")}`);
+    if (pick("reportedBy")) lines.push(`Reported by: ${pick("reportedBy")}`);
+    directives.push(...lines);
+  }
+
+  if (tnaForm04Requested) {
+    directives.push(
+      "",
+      "TASK: Produce a DOST TNA Form 04–style Technology Needs Assessment report from the transcript.",
+      "Tone: formal technical report (Philippine government / DOST context). Use complete paragraphs in findings where the reference form uses prose.",
+      "",
+      TNA_FORM_04_MARKDOWN_DIRECTIVE,
+    );
+  } else {
+    directives.push(
+      "",
+      ...(narrativeRequested
+        ? [
+            "OUTPUT FORMAT (Markdown):",
+            "## I. INTRODUCTION",
+            "## II. PRELIMINARIES",
+            "## III. FORUM DETAILS",
+            "### A. Participants",
+            "### B. Resource Speakers",
+            "### C. Topic Discussed",
+            "### D. Forum Methodologies",
+            "## IV. CONCLUSION",
+          ]
+        : [
+            "OUTPUT FORMAT (Markdown):",
+            "## Title",
+            "## Date/Time",
+            "## Attendees",
+            "## Agenda",
+            "## Executive Summary",
+            "## Key Points",
+            "## Decisions",
+            "## Action Items",
+            "## Risks / Blockers",
+            "## Next Steps",
+          ]),
+    );
+  }
+
+  directives.push("", transcriptLabel, transcriptTextForModel);
 
   try {
     const { summary, modelUsed } = await summarizeTranscriptMarkdown({
       directivesText: directives.join("\n"),
+      maxOutputTokens: tnaForm04Requested ? 12_288 : 4096,
     });
     if (!summary) {
       return res.status(500).json({ error: "No summary returned from model." });
     }
 
-    return res.json({ summary, modelUsed, ...condensedMeta });
+    return res.json({
+      summary,
+      modelUsed,
+      format: tnaForm04Requested ? "dost-tna-04" : "default",
+      ...condensedMeta,
+    });
   } catch (err) {
     if (err.status === 429) {
       console.warn("Summarization rate-limited (429).");
@@ -235,18 +278,22 @@ router.post("/notes", async (req, res) => {
   }
 });
 
-// POST /summary/pdf - application/json body: { summary, title? }
+// POST /summary/pdf - application/json body: { summary, title?, pdfTemplate? }
 router.post("/summary/pdf", async (req, res) => {
-  const { summary, title } = req.body ?? {};
+  const { summary, title, pdfTemplate } = req.body ?? {};
   const md = typeof summary === "string" ? summary.trim() : "";
   if (!md) {
     return res.status(400).json({ error: "Summary text is required." });
   }
 
+  const template =
+    pdfTemplate === "dost-tna-04" ? "dost-tna-04" : "default";
+
   try {
     const html = buildSummaryHtml({
       title: typeof title === "string" ? title : "Executive Summary",
       markdown: md,
+      template,
     });
 
     const browser = await puppeteer.launch({

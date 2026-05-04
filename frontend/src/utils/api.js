@@ -173,6 +173,7 @@ export async function summarizeTranscript(transcript, options = {}) {
       responseStyle: options.responseStyle,
       extraNotes: options.extraNotes,
       builtInPrompt: options.builtInPrompt,
+      tnaMeta: options.tnaMeta,
     }),
     timeoutMs: 5 * 60_000,
     maxRetries: 2,
@@ -184,6 +185,7 @@ export async function summarizeTranscript(transcript, options = {}) {
     condensed: Boolean(data.condensed),
     condensedChunks:
       typeof data.condensedChunks === "number" ? data.condensedChunks : 0,
+    format: typeof data.format === "string" ? data.format : "default",
   };
 }
 
@@ -200,6 +202,7 @@ export async function exportSummaryPdf(summary, options = {}) {
     body: JSON.stringify({
       summary,
       title: options.title,
+      pdfTemplate: options.pdfTemplate,
     }),
   });
 

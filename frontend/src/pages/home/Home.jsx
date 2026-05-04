@@ -33,6 +33,12 @@ const Home = () => {
   const [summaryModelUsed, setSummaryModelUsed] = useState(null);
   const [summaryCondensed, setSummaryCondensed] = useState(false);
   const [summaryCondensedChunks, setSummaryCondensedChunks] = useState(0);
+  const [summaryFormat, setSummaryFormat] = useState("default");
+  const [tnaCompany, setTnaCompany] = useState("");
+  const [tnaAddress, setTnaAddress] = useState("");
+  const [tnaReportNo, setTnaReportNo] = useState("");
+  const [tnaAuditDates, setTnaAuditDates] = useState("");
+  const [tnaReportedBy, setTnaReportedBy] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
 
@@ -62,6 +68,16 @@ const Home = () => {
     return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
   };
 
+  const isTnaForm04Mode = () => {
+    const p = builtInPrompt || "";
+    const d = documentType || "";
+    return (
+      /tna\s*form\s*04/i.test(p) ||
+      /dost\s*tna/i.test(p) ||
+      /technology\s*needs\s*assessment/i.test(d)
+    );
+  };
+
   const formatDuration = (seconds) => {
     if (!Number.isFinite(seconds) || seconds < 0) return "—";
     const total = Math.round(seconds);
@@ -82,6 +98,7 @@ const Home = () => {
     setSummary("");
     setSummaryError("");
     setSummaryModelUsed(null);
+    setSummaryFormat("default");
     setAudioDurationSeconds(null);
     setNotes("");
     setNotesError("");
@@ -228,6 +245,9 @@ const Home = () => {
     setSummary("");
     setSummaryError("");
     setSummaryModelUsed(null);
+    setSummaryCondensed(false);
+    setSummaryCondensedChunks(0);
+    setSummaryFormat("default");
     setNotes("");
     setNotesError("");
     setNotesModelUsed(null);
@@ -307,14 +327,33 @@ const Home = () => {
     setSummaryModelUsed(null);
     setSummaryCondensed(false);
     setSummaryCondensedChunks(0);
+    setSummaryFormat("default");
 
     try {
-      const { summary: s, modelUsed, condensed, condensedChunks } =
+      const tna = isTnaForm04Mode();
+      let tnaMeta;
+      if (tna) {
+        const o = {};
+        const c = tnaCompany.trim();
+        const a = tnaAddress.trim();
+        const r = tnaReportNo.trim();
+        const ad = tnaAuditDates.trim();
+        const rb = tnaReportedBy.trim();
+        if (c) o.company = c;
+        if (a) o.address = a;
+        if (r) o.reportNo = r;
+        if (ad) o.auditDates = ad;
+        if (rb) o.reportedBy = rb;
+        tnaMeta = Object.keys(o).length ? o : undefined;
+      }
+
+      const { summary: s, modelUsed, condensed, condensedChunks, format } =
         await summarizeTranscript(transcript, {
         builtInPrompt,
         documentType,
         responseStyle,
         extraNotes,
+        tnaMeta,
       });
       setSummary(s || "");
       if (modelUsed) setSummaryModelUsed(modelUsed);
@@ -322,6 +361,7 @@ const Home = () => {
       setSummaryCondensedChunks(
         typeof condensedChunks === "number" ? condensedChunks : 0,
       );
+      setSummaryFormat(format === "dost-tna-04" ? "dost-tna-04" : "default");
     } catch (err) {
       setSummaryError(err.message || "Failed to generate summary.");
     } finally {
@@ -341,6 +381,8 @@ const Home = () => {
     try {
       const blob = await exportSummaryPdf(summary, {
         title: `${transcriptBaseName}-summary`,
+        pdfTemplate:
+          summaryFormat === "dost-tna-04" ? "dost-tna-04" : undefined,
       });
 
       const pdfBlob =
@@ -438,6 +480,7 @@ const Home = () => {
     setSummaryModelUsed(null);
     setSummaryCondensed(false);
     setSummaryCondensedChunks(0);
+    setSummaryFormat("default");
     setPdfError("");
     setChunkJob(null);
     setChunkPartIndex(0);
@@ -450,6 +493,11 @@ const Home = () => {
     setNotesModelUsed(null);
     setNotesCondensed(false);
     setNotesCondensedChunks(0);
+    setTnaCompany("");
+    setTnaAddress("");
+    setTnaReportNo("");
+    setTnaAuditDates("");
+    setTnaReportedBy("");
   };
 
   const transcriptBaseName = file?.name
@@ -666,6 +714,7 @@ const Home = () => {
                       "Executive Minutes (Lite)",
                       "Action Items (Lite)",
                       "Narrative Report (Forum) (Lite)",
+                      "DOST TNA Form 04 (Technology Needs Assessment)",
                     ].map(
                       (opt) => (
                         <button
@@ -733,6 +782,12 @@ const Home = () => {
                     >
                       Forum Narrative Report
                     </option>
+                    <option
+                      className="bg-[#070A12]"
+                      value="Technology Needs Assessment (TNA) Report"
+                    >
+                      Technology Needs Assessment (TNA) Report
+                    </option>
                   </select>
                 </div>
 
@@ -767,28 +822,111 @@ const Home = () => {
                 </div>
               </div>
 
+              {isTnaForm04Mode() && (
+                <div className="rounded-2xl border border-sky-500/25 bg-sky-500/5 p-4">
+                  <p className="text-[11px] font-semibold tracking-widest text-sky-300/80">
+                    TNA FORM 04 — HEADER (OPTIONAL)
+                  </p>
+                  <p className="mt-1 text-xs text-white/55">
+                    If filled, COMPANY / ADDRESS and other lines are pinned; the
+                    model still builds Scope, Assessment, Findings, Conclusions,
+                    and Recommendations from the transcript.
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block text-xs text-white/50">
+                      Company / organization
+                      <input
+                        type="text"
+                        value={tnaCompany}
+                        onChange={(e) => setTnaCompany(e.target.value)}
+                        placeholder="e.g., LGU of Boac"
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none focus:border-sky-400/40"
+                      />
+                    </label>
+                    <label className="block text-xs text-white/50">
+                      Address
+                      <input
+                        type="text"
+                        value={tnaAddress}
+                        onChange={(e) => setTnaAddress(e.target.value)}
+                        placeholder="Municipality, province…"
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none focus:border-sky-400/40"
+                      />
+                    </label>
+                    <label className="block text-xs text-white/50">
+                      Report No.
+                      <input
+                        type="text"
+                        value={tnaReportNo}
+                        onChange={(e) => setTnaReportNo(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none focus:border-sky-400/40"
+                      />
+                    </label>
+                    <label className="block text-xs text-white/50">
+                      Audit date(s)
+                      <input
+                        type="text"
+                        value={tnaAuditDates}
+                        onChange={(e) => setTnaAuditDates(e.target.value)}
+                        placeholder="e.g., April 6, 2026"
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none focus:border-sky-400/40"
+                      />
+                    </label>
+                    <label className="block text-xs text-white/50 sm:col-span-2">
+                      Reported by
+                      <input
+                        type="text"
+                        value={tnaReportedBy}
+                        onChange={(e) => setTnaReportedBy(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none focus:border-sky-400/40"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-[11px] font-semibold tracking-widest text-white/40">
                   SPECIAL DIRECTIVES (LITE)
                 </p>
                 <p className="mt-2 text-xs leading-5 text-white/60">
-                  Write meeting minutes or forum{" "}
-                  <span className="font-semibold text-white/70">
-                    Narrative Report
-                  </span>{" "}
-                  in Markdown. Do not invent details. If missing:{" "}
-                  <span className="font-semibold text-white/70">
-                    Not specified
-                  </span>
-                  . Include: Title, Date, Attendees, Agenda, Executive Summary,
-                  Key Points, Decisions, Action Items, Risks, Next Steps. For
-                  Narrative Report (Forum), use sections:{" "}
-                  <span className="font-semibold text-white/70">
-                    I. INTRODUCTION, II. PRELIMINARIES, III. FORUM DETAILS - A.
-                    Participants, B. Resource Speakers, C. Topic Discussed, D.
-                    Forum Methodologies, IV. CONCLUSION
-                  </span>
-                  .
+                  {isTnaForm04Mode() ? (
+                    <>
+                      Output follows{" "}
+                      <span className="font-semibold text-white/70">
+                        DOST TNA Form 04
+                      </span>
+                      : Scope of Assessment (numbered areas 1–5), Summary of
+                      Assessment (Background, Methodology), Summary of Findings
+                      (same structure), then CONCLUSIONS and RECOMMENDATIONS as
+                      in the reference report. Missing facts:{" "}
+                      <span className="font-semibold text-white/70">
+                        Not specified
+                      </span>{" "}
+                      or{" "}
+                      <span className="font-semibold text-white/70">N/A</span>.
+                    </>
+                  ) : (
+                    <>
+                      Write meeting minutes or forum{" "}
+                      <span className="font-semibold text-white/70">
+                        Narrative Report
+                      </span>{" "}
+                      in Markdown. Do not invent details. If missing:{" "}
+                      <span className="font-semibold text-white/70">
+                        Not specified
+                      </span>
+                      . Include: Title, Date, Attendees, Agenda, Executive
+                      Summary, Key Points, Decisions, Action Items, Risks, Next
+                      Steps. For Narrative Report (Forum), use sections:{" "}
+                      <span className="font-semibold text-white/70">
+                        I. INTRODUCTION, II. PRELIMINARIES, III. FORUM DETAILS -
+                        A. Participants, B. Resource Speakers, C. Topic Discussed,
+                        D. Forum Methodologies, IV. CONCLUSION
+                      </span>
+                      .
+                    </>
+                  )}
                 </p>
               </div>
 
@@ -825,7 +963,9 @@ const Home = () => {
                 {pdfLoading && (
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white/80" />
                 )}
-                Export PDF
+                {summaryFormat === "dost-tna-04"
+                  ? "Export PDF (DOST TNA layout)"
+                  : "Export PDF"}
               </button>
 
               <div className="pt-2">
